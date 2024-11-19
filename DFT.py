@@ -1,57 +1,47 @@
 from pyscf import gto, dft
-from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit.Chem.Draw import IPythonConsole
-
 from collections import Counter
 
-IPythonConsole.drawOptions.addAtomIndices = True
+
+def get_spin(element_list):
+
+    unpaired_electrons = {
+        'H': 1, 'Li': 1, 'Be': 0, 'B': 1, 'C': 0,
+        'N': 3, 'O': 2, 'F': 1, 'Ne': 0,
+        'La': 1, 'Ni': 2, 'Mg': 0
+    }
+
+    total_electrons = 0
+
+    for element, count in element_list:
+        count = int(count) if count else 1  # Default to 1 if no number is given
+        if element in unpaired_electrons:
+            total_electrons += unpaired_electrons[element] * count  # Accumulate unpaired electrons
+        else:
+            print(f"Warning: Element '{element}' not defined in unpaired electrons.")
+
+    if total_electrons % 2 == 0:
+        total_unpaired = 0
+    else:
+        total_unpaired = 1
+
+    return total_unpaired
 
 
-def create_molecule(smiles, bond_lengths=None, add_explicit_h=True, filename=None):
-    """
-    Creates a molecule from a SMILES string, optionally adding explicit hydrogens and
-    setting specified bond lengths, then exports it to an XYZ file.
+def calculate_energy(atoms):
 
-    Parameters:
-    - smiles (str): The SMILES representation of the molecule.
-    - bond_lengths (list of floats): Bond lengths to set (must match the number of bonds).
-    - add_explicit_h (bool): Whether to add explicit hydrogens to the molecule.
-    - filename (str): The filename for the XYZ output.
+    symbols = [line.split()[0] for line in atoms]
+    element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
 
-    Returns:
-    - mol: The generated RDKit molecule object.
-    """
-
-    mol = Chem.MolFromSmiles(smiles)
-
-    if add_explicit_h:
-        mol = Chem.AddHs(mol)                                                                                           # Add explicit hydrogens if required
-
-    Chem.AllChem.EmbedMolecule(mol)
-
-    if bond_lengths:
-        for i in range(len(bond_lengths)):
-            if mol.GetNumAtoms() > i + 1:  # Ensure we have enough atoms
-                Chem.AllChem.SetBondLength(mol.GetConformer(0), i, i + 1, bond_lengths[i])
-
-    if filename:
-        Chem.MolToXYZFile(mol, filename)
-
-    return mol
-
-
-def calculate_energy(atom):
-
-    mol = gto.M(
-            verbose=0,
-            atom=atom,
-            basis='sto-3g',
-            unit='Angstrom',
-        )
+    mol = gto.M(                                                                                                        # Define the molecule in PySCF
+        verbose=0,
+        atom=atoms,
+        basis='def2-svp',
+        unit='Angstrom',
+        spin=get_spin(element_count)
+    )
 
     mf = dft.RKS(mol)                                                                                                   # Run DFT calculation
     mf.xc = 'b3lyp'                                                                                                     # Choose an exchange-correlation functional
     energy = mf.kernel()
 
-    return 27.2114*energy
+    return 27.2114 * energy, element_count                                                                              # Convert from Hartree to eV

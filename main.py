@@ -1,36 +1,67 @@
 import pandas as pd
 
 from Genetic_Algorithm import set_materials
-from Materials_Extractor import extract_material_info, extract_hydrogen
-from DFT import create_molecule, calculate_energy
+from Materials_Extractor import extract_hydrogen, extract_compound
+from DFT import calculate_energy
+from Mol_Geometry import plot, surface_finder, reorient_coordinates
+from Combine_Matrices import combine_matrices, place_hydrogen_molecules
+
+import test_bench
 
 
 hydrogen, compound_name, compound_ID = set_materials()
 
-hydrogen_smiles, hydrogen_bond = extract_hydrogen(f"{hydrogen}.poscar")
-compound_smiles, compound_bond = extract_material_info(compound_ID)
+hydrogen_bond, hydrogen_xyz = extract_hydrogen(f"{hydrogen}.poscar")
+compound_bond, compound_xyz = extract_compound(compound_ID)
 
-create_molecule(smiles=hydrogen_smiles, bond_lengths=hydrogen_bond, add_explicit_h=False, filename=f"{hydrogen}.xyz")
-create_molecule(smiles=compound_smiles, bond_lengths=compound_bond, add_explicit_h=True, filename=f"{compound_name}.xyz")
+dataframe = pd.DataFrame(columns=['Molecule', 'Symbols', 'Bond Lengths', 'XYZ', 'Energy'])
 
-energy_dataframe = pd.DataFrame(columns=['Molecule', 'Energy'])
+dataframe.loc[0] = [compound_name, None, compound_bond, compound_xyz, None]
+dataframe.loc[1] = [hydrogen, None, hydrogen_bond, hydrogen_xyz, None]
 
-for material in [hydrogen, compound_name]:
+for index, row in dataframe.iterrows():
 
-    energy = calculate_energy(f"{material}.xyz")
-    new_row = pd.DataFrame({'Molecule': [material], 'Energy': [energy]})
-    energy_dataframe = pd.concat([energy_dataframe, new_row], ignore_index=True)
+    material_xyz = row['XYZ']
 
-    print(f"{material} energy: ", energy)
+    energy, symbol_count = calculate_energy(material_xyz)
 
-input("Pause: ")
+    dataframe.loc[index, 'Symbols'] = str(symbol_count)
+    dataframe.loc[index, 'Energy'] = energy
 
-energy_combined = calculate_energy([
-                        'Li 0 0 0',
-                        f'H 0 0 {bond}',
-                        f'H 0 0 {z}',
-                        f'H 0 0 {z + 0.74}'
-                        ])
+compound_matrix = dataframe.loc[0]['XYZ']
+
+plot(compound_matrix)
+
+surface_points = surface_finder(compound_matrix)
+
+plot(reorient_coordinates(compound_matrix, surface_points))
+
+dataframe.at[0, 'XYZ'] = reorient_coordinates(compound_matrix, surface_points)
+reo_coords = dataframe.loc[0]['XYZ']
+
+loops = 0
+ads_energies = []
+
+while loops < 10:
+
+    print("Overall Loop: ", loops)
+    hydrogen_placed, mol_count = place_hydrogen_molecules(dataframe)
+    print("Hydrogen successfully placed")
+
+    matrix_combined = combine_matrices(reo_coords, hydrogen_placed)
+
+    energy_combined, symbol_count = calculate_energy(matrix_combined)
+
+    adsorption_energy = (energy_combined - (dataframe.loc[0, 'Energy'] + dataframe.loc[1, 'Energy']))/mol_count
+    print(f"Adsorption Energy per H2 molecule: {adsorption_energy} eV")
+    ads_energies.append(adsorption_energy)
+
+    loops += 1
+
+average_adsorption = sum(ads_energies) / len(ads_energies)
+
+print(f"Average Adsorption Energy per H2 molecule: {average_adsorption} eV")
+
 
 
 
