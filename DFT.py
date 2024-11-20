@@ -7,6 +7,7 @@ def get_spin(element_list):
     unpaired_electrons = {
         'H': 1, 'Li': 1, 'Be': 0, 'B': 1, 'C': 0,
         'N': 3, 'O': 2, 'F': 1, 'Ne': 0,
+        'Na': 1, 'Al': 1,  # Added Sodium and Aluminum
         'La': 1, 'Ni': 2, 'Mg': 0
     }
 

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from Genetic_Algorithm import set_materials
+from Genetic_Algorithm import set_materials, set_PT, calculate_spacing
 from Materials_Extractor import extract_hydrogen, extract_compound
 from DFT import calculate_energy
 from Mol_Geometry import plot, surface_finder, reorient_coordinates
@@ -9,61 +9,88 @@ from Combine_Matrices import combine_matrices, place_hydrogen_molecules
 import test_bench
 
 
-hydrogen, compound_name, compound_ID = set_materials()
+choice = input("Press 1. for testing mode, 2. for full mode: ")
 
-hydrogen_bond, hydrogen_xyz = extract_hydrogen(f"{hydrogen}.poscar")
-compound_bond, compound_xyz = extract_compound(compound_ID)
+if choice == '2':
 
-dataframe = pd.DataFrame(columns=['Molecule', 'Symbols', 'Bond Lengths', 'XYZ', 'Energy'])
+    hydrogen, compound_name, compound_ID = set_materials()
+    temperature, pressure = set_PT()
+    hydrogen_spacing = calculate_spacing(temperature, pressure)
 
-dataframe.loc[0] = [compound_name, None, compound_bond, compound_xyz, None]
-dataframe.loc[1] = [hydrogen, None, hydrogen_bond, hydrogen_xyz, None]
+    hydrogen_bond, hydrogen_xyz = extract_hydrogen(f"{hydrogen}.poscar")
+    compound_bond, compound_xyz = extract_compound(compound_ID)
 
-for index, row in dataframe.iterrows():
+    # Compute the total energy of the compound
+    compound_energy, compound_symbols = calculate_energy(compound_xyz)
+    print("Compound Energy: ", compound_energy)
 
-    material_xyz = row['XYZ']
+    # Conduct geometry transformations on compound
+    plot(compound_xyz)
+    surface_points = surface_finder(compound_xyz)
 
-    energy, symbol_count = calculate_energy(material_xyz)
+    plot(reorient_coordinates(compound_xyz, surface_points))
+    compound_reo_xyz = reorient_coordinates(compound_xyz, surface_points)
 
-    dataframe.loc[index, 'Symbols'] = str(symbol_count)
-    dataframe.loc[index, 'Energy'] = energy
+    # Compute total energy of random permutations of H2 on surface
+    loops = 0
+    ads_energies = []
 
-compound_matrix = dataframe.loc[0]['XYZ']
+    while loops < 10:
 
-plot(compound_matrix)
+        print("Molecule placement: ", loops)
+        hydrogen_placed, mol_count = place_hydrogen_molecules(compound_bond, compound_reo_xyz, hydrogen_bond, hydrogen_spacing)
+        print("Hydrogen successfully placed")
 
-surface_points = surface_finder(compound_matrix)
+        hydrogen_energy, hydrogen_symbols = calculate_energy(hydrogen_placed)
+        print("Hydrogen Energy: ", hydrogen_energy)
 
-plot(reorient_coordinates(compound_matrix, surface_points))
+        matrix_combined = combine_matrices(compound_reo_xyz, hydrogen_placed)
+        energy_combined, symbol_count = calculate_energy(matrix_combined)
+        print("Combined Energy: ", energy_combined)
 
-dataframe.at[0, 'XYZ'] = reorient_coordinates(compound_matrix, surface_points)
-reo_coords = dataframe.loc[0]['XYZ']
+        adsorption_energy = energy_combined - (compound_energy + hydrogen_energy)
+        ads_energies.append(adsorption_energy)
 
-loops = 0
-ads_energies = []
+        loops += 1
 
-while loops < 10:
+    # Calculate average adsorption
+    average_adsorption = sum(ads_energies) / len(ads_energies)
+    print(f"Average Adsorption Energy: {average_adsorption} eV")
 
-    print("Overall Loop: ", loops)
-    hydrogen_placed, mol_count = place_hydrogen_molecules(dataframe)
-    print("Hydrogen successfully placed")
+    if average_adsorption <= -0.2:
+        print("Chemisorption will mostly likely occur")
 
-    matrix_combined = combine_matrices(reo_coords, hydrogen_placed)
+    elif -0.2 < average_adsorption < 0:
+        print("Physisorption will most likely occur")
 
-    energy_combined, symbol_count = calculate_energy(matrix_combined)
+elif choice == '1':
 
-    adsorption_energy = (energy_combined - (dataframe.loc[0, 'Energy'] + dataframe.loc[1, 'Energy']))/mol_count
-    print(f"Adsorption Energy per H2 molecule: {adsorption_energy} eV")
-    ads_energies.append(adsorption_energy)
+    hydrogen, compound_name, compound_ID = set_materials()
+    temperature, pressure = set_PT()
+    hydrogen_spacing = calculate_spacing(temperature, pressure)
 
-    loops += 1
+    hydrogen_bond, hydrogen_xyz = extract_hydrogen(f"{hydrogen}.poscar")
+    compound_bond, compound_xyz = extract_compound(compound_ID)
 
-average_adsorption = sum(ads_energies) / len(ads_energies)
+    surface_points = surface_finder(compound_xyz)
+    compound_reo_xyz = reorient_coordinates(compound_xyz, surface_points)
+    plot(reorient_coordinates(compound_xyz, surface_points))
 
-print(f"Average Adsorption Energy per H2 molecule: {average_adsorption} eV")
+    # Compute total energy of random permutations of H2 on surface
+    loops = 0
+    ads_energies = []
 
+    while loops < 10:
+        print("Molecule placement No.: ", loops)
+        hydrogen_placed, mol_count = place_hydrogen_molecules(compound_bond, compound_reo_xyz, hydrogen_bond,
+                                                              hydrogen_spacing)
+        print("Hydrogen successfully placed")
 
+        hydrogen_energy, hydrogen_symbols = calculate_energy(hydrogen_placed)
+        print("Hydrogen Energy: ", hydrogen_energy)
 
+        matrix_combined = combine_matrices(compound_reo_xyz, hydrogen_placed)
+        energy_combined, symbol_count = calculate_energy(matrix_combined)
+        print("Combined Energy: ", energy_combined)
 
-
-
+        loops += 1

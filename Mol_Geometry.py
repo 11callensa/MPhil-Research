@@ -112,12 +112,10 @@ def plot(matrix):
 
 
 def surface_finder(matrix):
-
     elements = []
     coordinates = []
 
     for line in matrix:
-
         parts = line.split()
         elements.append(parts[0])
         coordinates.append([float(parts[1]), float(parts[2]), float(parts[3])])
@@ -131,8 +129,6 @@ def surface_finder(matrix):
         largest_face = None
         normal_vector = None
         point_on_plane = None
-        selected_face = None
-        selected_z_avg = -np.inf  # To track the highest average Z value
 
         # Iterate over all faces (simplices) in the convex hull
         for simplex in hull.simplices:
@@ -146,24 +142,35 @@ def surface_finder(matrix):
             # Calculate the average Z-coordinate for the face
             avg_z = np.mean(face_points[:, 2])
 
-            # Check if this face has the largest area or if it's the same area but uppermost
-            if area > max_area or (area == max_area and avg_z > selected_z_avg):
+            # Check if this face has the largest area
+            if area > max_area:
                 max_area = area
                 largest_face = face_points
-                selected_z_avg = avg_z
-                selected_face = simplex
 
                 # Calculate normal vector and point on plane for the largest face
                 normal_vector = np.cross(v1, v2)
                 point_on_plane = face_points[0]
 
-        # Find the 3 points on the largest face (select only 3 points)
+        # Find the equation of the plane for the largest face
         if largest_face is not None:
-            return largest_face[:3]  # Return the first 3 points on the largest face
+            d = -np.dot(normal_vector, point_on_plane)
+            return largest_face, normal_vector, d  # Return the largest face and its plane parameters
         else:
-            return np.array([])  # In case no face is found
+            return np.array([]), None, None
 
-    largest_surface_points = find_largest_outer_surface(coordinates)
+    # Get the largest surface and plane equation
+    largest_surface_points, normal_vector, d = find_largest_outer_surface(coordinates)
+
+    # Find all points lying on the plane
+    def points_on_plane(coordinates, normal_vector, d, tolerance=1e-3):
+        plane_points = []
+        for point in coordinates:
+            distance = abs(np.dot(normal_vector, point) + d) / np.linalg.norm(normal_vector)
+            if distance < tolerance:
+                plane_points.append(point)
+        return np.array(plane_points)
+
+    plane_points = points_on_plane(coordinates, normal_vector, d)
 
     # Plotting
     fig = plt.figure()
@@ -173,13 +180,15 @@ def surface_finder(matrix):
     ax.scatter(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], color='blue', s=50, label="All Points")
 
     # Highlight the points on the largest surface plane
-    if largest_surface_points.shape[0] == 3:
-        ax.scatter(largest_surface_points[:, 0], largest_surface_points[:, 1], largest_surface_points[:, 2],
-                   color='red', s=80, label="Largest Surface Points")
+    if plane_points.size > 0:
+        ax.scatter(plane_points[:, 0], plane_points[:, 1], plane_points[:, 2],
+                   color='red', s=80, label="Points on Largest Surface")
 
-        # Create and plot the plane for the largest surface using just the 3 points
-        verts = [largest_surface_points]  # Points on the largest surface
-        ax.add_collection3d(Poly3DCollection(verts, color='cyan', alpha=0.3, edgecolor='k'))
+        # Optionally, draw the convex hull for the points on the plane
+        if len(plane_points) >= 3:
+            hull_plane = ConvexHull(plane_points[:, :2])  # Convex hull in the x-y plane
+            verts = [plane_points[hull_plane.vertices, :3]]  # Extract vertices for plotting
+            ax.add_collection3d(Poly3DCollection(verts, color='cyan', alpha=0.3, edgecolor='k'))
 
     # Labels and viewing angle
     ax.set_xlabel('X')
@@ -187,6 +196,7 @@ def surface_finder(matrix):
     ax.set_zlabel('Z')
     ax.view_init(elev=20, azim=30)
 
+    plt.title("Largest Surface Plotter")
     plt.legend()
     plt.show()
 
@@ -218,30 +228,22 @@ def rotation_matrix_calculator(normal_vector):
     # Normalize the rotation axis
     rotation_axis = rotation_axis / sin_angle
 
-    # print("Normalised rotation axis: ", rotation_axis)
-
     # Compute the rotation matrix using Rodrigues' rotation formula
     K = np.array([[0, -rotation_axis[2], rotation_axis[1]],
                   [rotation_axis[2], 0, -rotation_axis[0]],
                   [-rotation_axis[1], rotation_axis[0], 0]])
 
-    # print("K: ", K) #GOOD
-
     K_squared = np.dot(K, K)
 
-    # print("K squared: ", K_squared)
-    # print("Previous K squared: ", np.outer(rotation_axis, rotation_axis))
-
     rotation_matrix = np.eye(3) + K * sin_angle + K_squared * (1 - cos_angle)
-
-    # print("Rotation matrix: ", rotation_matrix)
 
     return rotation_matrix
 
 
 def reorient_coordinates(base_matrix, largest_surface_points):
     """
-    Reorient the coordinates of the shape based on the identified surface plane.
+    Reorient the coordinates of the shape based on the identified surface plane,
+    ensuring the largest surface is the uppermost parallel to the XY plane.
     """
     if len(largest_surface_points) != 3:
         raise ValueError("Exactly three points are required to define a plane.")
@@ -255,16 +257,11 @@ def reorient_coordinates(base_matrix, largest_surface_points):
     v1 = P2 - P1
     v2 = P3 - P1
 
-    # print("Vector 1: ", v1)
-    # print("Vector 2: ", v2)
-
     # Compute the normal vector to the surface (cross product of v1 and v2)
     normal_vector = np.cross(v1, v2)
 
     # Normalize the normal vector
     normal_vector = normal_vector / np.linalg.norm(normal_vector)
-
-    # print("Normalised normal vector: ", normal_vector)
 
     # Rotate the shape so the plane becomes parallel to the XY plane (normal vector to Z axis)
     rotation_matrix = rotation_matrix_calculator(normal_vector)
@@ -279,10 +276,23 @@ def reorient_coordinates(base_matrix, largest_surface_points):
 
     coordinates = np.array(coordinates)
 
+    # Check Z-coordinates of the largest surface points after rotation
+    rotated_surface_points = [np.dot(rotation_matrix, point) for point in largest_surface_points]
+    surface_z_avg = np.mean([point[2] for point in rotated_surface_points])
+
+    # Compare the Z-coordinates of the largest surface to ensure it is at the top
+    rotated_surface_points_set = {tuple(point) for point in rotated_surface_points}
+    other_points_z_avg = np.mean([coord[2] for coord in coordinates if tuple(coord) not in rotated_surface_points_set])
+
+    if surface_z_avg < other_points_z_avg:
+        # Flip the shape by inverting the Z-axis if the surface is below
+        inversion_matrix = np.diag([1, 1, -1])
+        coordinates = np.dot(coordinates, inversion_matrix)
+        rotated_surface_points = np.dot(rotated_surface_points, inversion_matrix)
+
     # Translate to ensure the surface is at the top
-    # Find the highest point of the surface in the Z-direction
-    max_z = np.max(coordinates[:, 2])
-    translation = np.array([0, 0, -max_z])
+    max_surface_z = np.max([point[2] for point in rotated_surface_points])
+    translation = np.array([0, 0, -max_surface_z])
 
     # Apply the translation to all coordinates
     translated_coordinates = coordinates + translation
@@ -294,10 +304,7 @@ def reorient_coordinates(base_matrix, largest_surface_points):
         new_x, new_y, new_z = translated_coordinates[i]
         new_base_matrix.append(f'{parts[0]} {new_x:.10f} {new_y:.10f} {new_z:.10f}')
 
-    # print("New Base Matrix: ", new_base_matrix)
-
     return new_base_matrix
-
 
 # plot(base_matrix)
 # surface_points = surface(base_matrix)  # This should return the largest surface points
