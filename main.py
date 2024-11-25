@@ -4,9 +4,8 @@ from Genetic_Algorithm import set_materials, set_PT, calculate_spacing
 from Materials_Extractor import extract_hydrogen, extract_compound
 from DFT import calculate_energy
 from Mol_Geometry import plot, surface_finder, reorient_coordinates
+from Binding_Sites import mesh, compute_energy_with_hydrogen, find_local_minima, plot_local_minima
 from Combine_Matrices import combine_matrices, place_hydrogen_molecules
-
-import test_bench
 
 
 choice = input("Press 1. for testing mode, 2. for full mode: ")
@@ -22,46 +21,25 @@ if choice == '2':
 
     # Compute the total energy of the compound
     compound_energy, compound_symbols = calculate_energy(compound_xyz)
-    print("Compound Energy: ", compound_energy)
 
     # Conduct geometry transformations on compound
     plot(compound_xyz)
     surface_points = surface_finder(compound_xyz)
 
-    plot(reorient_coordinates(compound_xyz, surface_points))
     compound_reo_xyz = reorient_coordinates(compound_xyz, surface_points)
+    plot(compound_reo_xyz)
 
-    # Compute total energy of random permutations of H2 on surface
-    loops = 0
-    ads_energies = []
+    # Find binding sites
 
-    while loops < 10:
+    mesh_points = mesh(compound_reo_xyz)
+    binding_sites, total_energies = compute_energy_with_hydrogen(compound_reo_xyz, mesh_points)
+    local_minima_positions = find_local_minima(binding_sites, total_energies)
 
-        print("Molecule placement: ", loops)
-        hydrogen_placed, mol_count = place_hydrogen_molecules(compound_bond, compound_reo_xyz, hydrogen_bond, hydrogen_spacing)
-        print("Hydrogen successfully placed")
+    print("Local minima coordinates:")
+    print(local_minima_positions)
 
-        hydrogen_energy, hydrogen_symbols = calculate_energy(hydrogen_placed)
-        print("Hydrogen Energy: ", hydrogen_energy)
+    # Compute total energy of H2 on surface
 
-        matrix_combined = combine_matrices(compound_reo_xyz, hydrogen_placed)
-        energy_combined, symbol_count = calculate_energy(matrix_combined)
-        print("Combined Energy: ", energy_combined)
-
-        adsorption_energy = energy_combined - (compound_energy + hydrogen_energy)
-        ads_energies.append(adsorption_energy)
-
-        loops += 1
-
-    # Calculate average adsorption
-    average_adsorption = sum(ads_energies) / len(ads_energies)
-    print(f"Average Adsorption Energy: {average_adsorption} eV")
-
-    if average_adsorption <= -0.2:
-        print("Chemisorption will mostly likely occur")
-
-    elif -0.2 < average_adsorption < 0:
-        print("Physisorption will most likely occur")
 
 elif choice == '1':
 
@@ -74,23 +52,17 @@ elif choice == '1':
 
     surface_points = surface_finder(compound_xyz)
     compound_reo_xyz = reorient_coordinates(compound_xyz, surface_points)
-    plot(reorient_coordinates(compound_xyz, surface_points))
 
-    # Compute total energy of random permutations of H2 on surface
-    loops = 0
-    ads_energies = []
+    plot(compound_reo_xyz)
 
-    while loops < 10:
-        print("Molecule placement No.: ", loops)
-        hydrogen_placed, mol_count = place_hydrogen_molecules(compound_bond, compound_reo_xyz, hydrogen_bond,
-                                                              hydrogen_spacing)
-        print("Hydrogen successfully placed")
+    # Find binding sites
 
-        hydrogen_energy, hydrogen_symbols = calculate_energy(hydrogen_placed)
-        print("Hydrogen Energy: ", hydrogen_energy)
+    mesh_points, surface_points = mesh(compound_reo_xyz)
+    binding_sites, total_energies = compute_energy_with_hydrogen(compound_reo_xyz, mesh_points)
+    local_minima_positions = find_local_minima(binding_sites, total_energies)
 
-        matrix_combined = combine_matrices(compound_reo_xyz, hydrogen_placed)
-        energy_combined, symbol_count = calculate_energy(matrix_combined)
-        print("Combined Energy: ", energy_combined)
+    plot_local_minima(binding_sites, total_energies, local_minima_positions, mesh_points, surface_points)
 
-        loops += 1
+    # Compute total energy of H2 on surface
+
+

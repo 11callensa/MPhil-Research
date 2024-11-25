@@ -5,40 +5,6 @@ import matplotlib.cm as cm
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-# Correctly formatted base matrix with commas
-# base_matrix = [
-#     'Li 0.0000000000 0.0000000000 0.0000000000',
-#     'Li -0.0000000000 2.0086193919 2.0086193919',
-#     'Li 2.0086193919 0.0000000000 2.0086193919',
-#     'Li 2.0086193919 2.0086193919 0.0000000000',
-#     'H 0.0000000000 0.0000000000 2.0086193919',
-#     'H -0.0000000000 2.0086193919 0.0000000000',
-#     'H 2.0086193919 0.0000000000 0.0000000000',
-#     'H 2.0086193919 2.0086193919 2.0086193919'
-# ]
-
-
-# base_matrix = ['La 0.0000000000 0.0000000000 3.7649854168',
-#                'Ni 3.8956769237 -2.2491701206 2.0984875349',
-#                'Ni 2.6506802448 -0.0927726175 2.0984875349',
-#                'Ni 1.4056835660 -2.2491701206 2.0984875349',
-#                'Ni 2.6506802448 1.5303709529 0.2077287805',
-#                'Ni 2.6506802448 -1.5303709529 0.0683256443',
-#                'H 1.3576333598 2.2769119200 3.7263083042',
-#                'H 2.6506802448 0.0372890186 3.7263083042',
-#                'H 3.9437271298 2.2769119200 3.7263083042',
-#                'H 3.8936743347 0.8127279805 1.5189022224',
-#                'H 2.6506802448 2.9656568977 1.5189022224',
-#                'H 1.4076861549 0.8127279805 1.5189022224']
-
-
-# base_matrix = ['Mg 2.2383470000 2.2383470000 1.4962685000',
-#                'Mg 0.0000000000 0.0000000000 0.0000000000',
-#                'H 3.1138629990 3.1138629990 0.0000000000',
-#                'H 0.8755159990 3.6011780010 1.4962685000',
-#                'H 1.3628310010 1.3628310010 0.0000000000',
-#                'H 3.6011780010 0.8755159990 1.4962685000']
-
 
 def plot(matrix):
     elements = []
@@ -70,36 +36,27 @@ def plot(matrix):
         ax.scatter(coords_elem[:, 0], coords_elem[:, 1], coords_elem[:, 2],
                    color=colors[elem], label=elem, s=50)
 
-    # Compute the convex hull to find outer surfaces (planes)
+    # Compute the convex hull to find the outer surfaces
     hull = ConvexHull(coordinates)
 
-    # Loop over each face (simplices) of the convex hull
+    # Identify the uppermost surface
+    uppermost_surface_points = None
+    max_avg_z = -np.inf
+
     for simplex in hull.simplices:
         # Get the points for the face
         face_points = coordinates[simplex]
+        avg_z = np.mean(face_points[:, 2])
 
-        # Calculate the normal vector and plane equation for the face
-        v1 = face_points[1] - face_points[0]
-        v2 = face_points[2] - face_points[0]
-        normal_vector = np.cross(v1, v2)
-        point_on_plane = face_points[0]
+        # Update if this face has the highest average Z-coordinate
+        if avg_z > max_avg_z:
+            max_avg_z = avg_z
+            uppermost_surface_points = face_points
 
-        # Create the plane for this face
-        plane_points = []
-        tolerance = 2*10^-15  # Increase this tolerance if needed
-        for point in coordinates:
-            # Check if the point lies on the plane using the plane equation
-            # Calculate the distance from the point to the plane
-            distance = np.abs(np.dot(normal_vector, point - point_on_plane))
-            if distance < tolerance:
-                plane_points.append(point)
-
-        plane_points = np.array(plane_points)
-
-        # Plot the plane as a translucent surface if there are sufficient points
-        if len(plane_points) >= 3:
-            verts = [plane_points]  # Points on the plane
-            ax.add_collection3d(Poly3DCollection(verts, color='cyan', alpha=0.3, edgecolor='k'))
+    # Plot the plane for the uppermost surface
+    if uppermost_surface_points is not None:
+        verts = [uppermost_surface_points]
+        ax.add_collection3d(Poly3DCollection(verts, color='cyan', alpha=0.5, edgecolor='k'))
 
     # Labels and viewing angle
     ax.set_xlabel('X')
@@ -123,82 +80,54 @@ def surface_finder(matrix):
     coordinates = np.array(coordinates)
 
     def find_largest_outer_surface(coordinates):
-        # Compute the convex hull of all points
-        hull = ConvexHull(coordinates)
-        max_area = 0
-        largest_face = None
-        normal_vector = None
-        point_on_plane = None
+        try:
+            # Attempt to compute the convex hull of all points
+            hull = ConvexHull(coordinates)
+            max_area = 0
+            largest_face = None
+            normal_vector = None
+            point_on_plane = None
 
-        # Iterate over all faces (simplices) in the convex hull
-        for simplex in hull.simplices:
-            face_points = coordinates[simplex]
+            # Iterate over all faces (simplices) in the convex hull
+            for simplex in hull.simplices:
+                face_points = coordinates[simplex]
 
-            # Calculate the area of the face (using the first 3 points of the simplex)
-            v1 = face_points[1] - face_points[0]
-            v2 = face_points[2] - face_points[0]
-            area = 0.5 * np.linalg.norm(np.cross(v1, v2))
+                # Calculate the area of the face (using the first 3 points of the simplex)
+                v1 = face_points[1] - face_points[0]
+                v2 = face_points[2] - face_points[0]
+                area = 0.5 * np.linalg.norm(np.cross(v1, v2))
 
-            # Calculate the average Z-coordinate for the face
-            avg_z = np.mean(face_points[:, 2])
+                # Calculate the average Z-coordinate for the face
+                avg_z = np.mean(face_points[:, 2])
 
-            # Check if this face has the largest area
-            if area > max_area:
-                max_area = area
-                largest_face = face_points
+                # Check if this face has the largest area
+                if area > max_area:
+                    max_area = area
+                    largest_face = face_points
 
-                # Calculate normal vector and point on plane for the largest face
-                normal_vector = np.cross(v1, v2)
-                point_on_plane = face_points[0]
+                    # Calculate normal vector and point on plane for the largest face
+                    normal_vector = np.cross(v1, v2)
+                    point_on_plane = face_points[0]
+            if largest_face is not None:
+                d = -np.dot(normal_vector, point_on_plane)
+                return largest_face, normal_vector, d
+        except Exception as e:
+            # If convex hull fails (e.g., flat geometry), use fallback approach
+            print("Convex Hull failed, falling back to direct surface detection.")
 
-        # Find the equation of the plane for the largest face
-        if largest_face is not None:
-            d = -np.dot(normal_vector, point_on_plane)
-            return largest_face, normal_vector, d  # Return the largest face and its plane parameters
-        else:
-            return np.array([]), None, None
+            # Fallback logic: identify uppermost surface by maximum z-coordinate
+            max_z = np.max(coordinates[:, 2])
+            largest_face = coordinates[coordinates[:, 2] == max_z]
+
+            # Plane equation for flat surfaces: normal is perpendicular to the z-axis
+            normal_vector = np.array([0, 0, 1])
+            d = -max_z
+            return largest_face, normal_vector, d
+
+        return np.array([]), None, None
 
     # Get the largest surface and plane equation
     largest_surface_points, normal_vector, d = find_largest_outer_surface(coordinates)
-
-    # Find all points lying on the plane
-    def points_on_plane(coordinates, normal_vector, d, tolerance=1e-3):
-        plane_points = []
-        for point in coordinates:
-            distance = abs(np.dot(normal_vector, point) + d) / np.linalg.norm(normal_vector)
-            if distance < tolerance:
-                plane_points.append(point)
-        return np.array(plane_points)
-
-    plane_points = points_on_plane(coordinates, normal_vector, d)
-
-    # Plotting
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Plot all points
-    ax.scatter(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], color='blue', s=50, label="All Points")
-
-    # Highlight the points on the largest surface plane
-    if plane_points.size > 0:
-        ax.scatter(plane_points[:, 0], plane_points[:, 1], plane_points[:, 2],
-                   color='red', s=80, label="Points on Largest Surface")
-
-        # Optionally, draw the convex hull for the points on the plane
-        if len(plane_points) >= 3:
-            hull_plane = ConvexHull(plane_points[:, :2])  # Convex hull in the x-y plane
-            verts = [plane_points[hull_plane.vertices, :3]]  # Extract vertices for plotting
-            ax.add_collection3d(Poly3DCollection(verts, color='cyan', alpha=0.3, edgecolor='k'))
-
-    # Labels and viewing angle
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.view_init(elev=20, azim=30)
-
-    plt.title("Largest Surface Plotter")
-    plt.legend()
-    plt.show()
 
     return largest_surface_points
 
@@ -305,24 +234,3 @@ def reorient_coordinates(base_matrix, largest_surface_points):
         new_base_matrix.append(f'{parts[0]} {new_x:.10f} {new_y:.10f} {new_z:.10f}')
 
     return new_base_matrix
-
-# plot(base_matrix)
-# surface_points = surface(base_matrix)  # This should return the largest surface points
-#
-# new_base_matrix = reorient_coordinates(base_matrix, surface_points)
-# plot(new_base_matrix)
-
-
-
-# surface_points = np.array([[3, 2, 3], [4, 1, 6], [1, 3, 5]])
-#
-# test_matrix = ['Hi 3 2 3',
-#                 'Hi 4 1 6',
-#                 'Hi 1 3 5',
-#                 'Hi 5 7 9']
-#
-# plot(test_matrix)
-#
-# print("Surface points: ", surface_points)
-# new_base_matrix = reorient_coordinates(test_matrix, surface_points)
-# plot(new_base_matrix)

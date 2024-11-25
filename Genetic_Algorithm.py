@@ -14,9 +14,9 @@ def set_materials():
 
     # compound = {'LaNi5H6': ['mp-1222987']}
 
-    # compound = {'MgH2': ['mp-23710']}
+    compound = {'MgH2': ['mp-23710']}
 
-    compound = {'NaBH4': ['mp-38725']}
+    # compound = {'NaBH4': ['mp-38725']}
     # compound = {'NaAlH4': ['mp-23704']}
 
     compound_name = list(compound.keys())[0]
@@ -27,8 +27,8 @@ def set_materials():
 
 def set_PT():
 
-    temperature = 30
-    pressure = 101
+    temperature = 20
+    pressure = 100
 
     return temperature, pressure
 

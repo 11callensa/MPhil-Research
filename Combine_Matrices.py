@@ -80,24 +80,24 @@ def place_hydrogen_molecules(compound_bond, compound_xyz, hydrogen_bond, hydroge
 
     print("No. of molecules: ", len(placed_molecules))
 
-    fig = plt.figure()                                                                                                  # Plotting
-    ax = fig.add_subplot(111, projection='3d')
-
-    surface_x = [point[0] for point in xy_coordinates]                                                                  # Plot the surface points
-    surface_y = [point[1] for point in xy_coordinates]
-    surface_z = [z_max] * len(surface_points)
-    ax.scatter(surface_x, surface_y, surface_z, c='blue', label='Surface')
-
-    for atom1_x, atom1_y, atom2_x, atom2_y in placed_molecules:
-        ax.scatter([atom1_x, atom2_x], [atom1_y, atom2_y], [h2_z, h2_z], c='red')                              # Plot the individual atoms
-        ax.plot([atom1_x, atom2_x], [atom1_y, atom2_y], [h2_z, h2_z], c='red', linewidth=0.8)                     # Plot a line connecting the two atoms of the molecule
-
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_zlabel('Z Coordinate')
-    ax.legend()
-    plt.title("Hydrogen Placement Above Surface")
-    plt.show()
+    # fig = plt.figure()                                                                                                  # Plotting
+    # ax = fig.add_subplot(111, projection='3d')
+    #
+    # surface_x = [point[0] for point in xy_coordinates]                                                                  # Plot the surface points
+    # surface_y = [point[1] for point in xy_coordinates]
+    # surface_z = [z_max] * len(surface_points)
+    # ax.scatter(surface_x, surface_y, surface_z, c='blue', label='Surface')
+    #
+    # for atom1_x, atom1_y, atom2_x, atom2_y in placed_molecules:
+    #     ax.scatter([atom1_x, atom2_x], [atom1_y, atom2_y], [h2_z, h2_z], c='red')                              # Plot the individual atoms
+    #     ax.plot([atom1_x, atom2_x], [atom1_y, atom2_y], [h2_z, h2_z], c='red', linewidth=0.8)                     # Plot a line connecting the two atoms of the molecule
+    #
+    # ax.set_xlabel('X Coordinate')
+    # ax.set_ylabel('Y Coordinate')
+    # ax.set_zlabel('Z Coordinate')
+    # ax.legend()
+    # plt.title("Hydrogen Placement Above Surface")
+    # plt.show()
 
     hydrogen_atoms = []
     for atom1_x, atom1_y, atom2_x, atom2_y in placed_molecules:
