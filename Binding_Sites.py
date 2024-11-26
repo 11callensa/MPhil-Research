@@ -1,23 +1,32 @@
 from scipy.spatial import Delaunay, ConvexHull
 from matplotlib.path import Path
-from pyscf import gto, scf, dft
+from pyscf import gto, dft
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.interpolate import griddata
-from scipy.signal import argrelextrema
+from scipy.spatial.distance import cdist
 
-from Mol_Geometry import plot
 from DFT import get_spin
 
 
-def mesh(compound_xyz):
+def mesh(compound_xyz, surface_points):
+    """
+        Creates a mesh of points on the surface for hydrogen atoms to be placed at each.
+
+        :param compound_xyz: The 3D coordinates of the reoriented compound.
+        :param surface_points: The 3D coordinates of the uppermost surface.
+        :return: The coordinates of the mesh points.
+    """
+
     coordinates = np.array([[float(x) for x in line.split()[1:]] for line in compound_xyz])
 
     z_max = np.max(coordinates[:, 2])
-    surface_points = coordinates[coordinates[:, 2] == z_max][:, :2]  # Only x, y
+
+    # Keep only the x and y coordinates
+    surface_points = surface_points[:, :2]
 
     hull = ConvexHull(surface_points)
     hull_path = Path(surface_points[hull.vertices])
@@ -25,7 +34,7 @@ def mesh(compound_xyz):
     x_min, x_max = np.min(surface_points[:, 0]), np.max(surface_points[:, 0])
     y_min, y_max = np.min(surface_points[:, 1]), np.max(surface_points[:, 1])
 
-    resolution = 8
+    resolution = 7
     x_grid = np.linspace(x_min, x_max, resolution)
     y_grid = np.linspace(y_min, y_max, resolution)
     x_mesh, y_mesh = np.meshgrid(x_grid, y_grid)
@@ -35,18 +44,18 @@ def mesh(compound_xyz):
     filtered_points = grid_points[inside_mask]
 
     filtered_points_3d = np.c_[filtered_points, np.full(filtered_points.shape[0], z_max)]
-    all_points = np.vstack((filtered_points_3d, coordinates[coordinates[:, 2] == z_max]))
+    mesh_points = np.vstack((filtered_points_3d, coordinates[coordinates[:, 2] == z_max]))
 
-    tri = Delaunay(all_points[:, :2])
+    tri = Delaunay(mesh_points[:, :2])
 
     triangles = tri.simplices
-    triangle_faces = [[list(all_points[vertex]) for vertex in triangle] for triangle in triangles]
+    triangle_faces = [[list(mesh_points[vertex]) for vertex in triangle] for triangle in triangles]
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
     ax.add_collection3d(Poly3DCollection(triangle_faces, alpha=0.5, edgecolor='k'))
-    ax.scatter(all_points[:, 0], all_points[:, 1], all_points[:, 2], color='r', s=5, label="Grid Points")
+    ax.scatter(mesh_points[:, 0], mesh_points[:, 1], mesh_points[:, 2], color='r', s=5, label="Grid Points")
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -60,11 +69,19 @@ def mesh(compound_xyz):
     plt.legend()
     plt.show()
 
-    return all_points, surface_points
+    return mesh_points
 
 
-# Compute energy with added hydrogen atom
-def compute_energy_with_hydrogen(compound_xyz, mesh_points):
+def energy_profile(compound_xyz, mesh_points):
+    """
+        Places a hydrogen atom at each mesh point and computes the total energy, creating an
+        energy profile.
+        
+        :param compound_xyz: 3D coordinates of the compound.
+        :param mesh_points: Locations to conduct energy calculation.
+        :return: Each mesh point and its associated energy.
+    """
+    
     energies = []
     positions = []
 
@@ -93,25 +110,56 @@ def compute_energy_with_hydrogen(compound_xyz, mesh_points):
     return np.array(positions), np.array(energies)
 
 
-# Find the local minima
-def find_local_minima(positions, energies):
-    local_minima_indices = argrelextrema(energies, np.less)[0]
+def find_local_minima(positions, energies, distance_threshold=1.0):
+    """
+        Compares each mesh point's energy with the energies of the surrounding mesh points
+        to identify local minima energy locations.
+
+        :param positions: Mesh points.
+        :param energies: Associated energies of all mesh points.
+        :param distance_threshold: Nearest points means any points within a 1 angstrom radius.
+        :return:
+    """
+
+    local_minima_indices = []
+
+    # Convert positions to a 2D array of [x, y] (ignoring z)
+    xy_positions = positions[:, :2]
+
+    # Loop through all positions
+    for i, (pos, energy) in enumerate(zip(xy_positions, energies)):
+        # Calculate distances between the current point and all other points
+        distances = cdist([pos], xy_positions)[0]
+
+        # Find indices of points within the threshold distance
+        nearby_indices = np.where(distances <= distance_threshold)[0]
+
+        # Compare energy with its neighbors
+        # If the energy at this position is less than all nearby positions, it's a local minimum
+        is_local_minimum = True
+        for j in nearby_indices:
+            if energies[j] < energy:
+                is_local_minimum = False
+                break
+
+        # If it's a local minimum, add the index
+        if is_local_minimum:
+            # Check if this energy is already in the list of minima
+            if energy not in [energies[idx] for idx in local_minima_indices]:
+                local_minima_indices.append(i)
+            else:
+                # If the energy is the same as a previously found local minimum, include this as well
+                # To prevent duplication, ensure the same index isn't added again
+                if i not in local_minima_indices:
+                    local_minima_indices.append(i)
+
+    # Extract positions of local minima based on the identified indices
     local_minima_positions = positions[local_minima_indices]
 
     return local_minima_positions
 
 
-# Plot the local minima on top of the heatmap
-def plot_local_minima(positions, energies, local_minima_positions, mesh_points, surface_points_2d):
-    """
-    Plots the heatmap of energies in 2D and overlays the local minima and surface points.
-
-    Args:
-        positions (ndarray): The 2D positions of the mesh points.
-        energies (ndarray): The energies at each mesh point.
-        local_minima_positions (ndarray): The 2D positions of the local minima.
-        surface_points_2d (ndarray): The 2D coordinates of the surface mesh points.
-    """
+def plot_local_minima(positions, energies, local_minima_positions, mesh_points):
     # Prepare heatmap of energies
     x = positions[:, 0]
     y = positions[:, 1]
@@ -139,4 +187,3 @@ def plot_local_minima(positions, energies, local_minima_positions, mesh_points, 
     plt.title('Local Minima and Energy Heatmap')
     plt.legend()
     plt.show()
-
