@@ -38,7 +38,7 @@ def place_hydrogen_molecules(local_minima, surface_points, hydrogen_bond):
 
         placed_molecules.append((atom1_x, atom1_y, atom2_x, atom2_y))
 
-    print("No. of molecules: ", len(placed_molecules))
+    print("No. of H2 molecules placed: ", len(placed_molecules))
 
     # Plotting
     fig = plt.figure()
