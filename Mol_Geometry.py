@@ -69,6 +69,14 @@ def plot(matrix):
 
 
 def surface_finder(matrix):
+    """
+        Finds the largest surface of the compound. This will be assumed as the surface
+        the molecules will adsorb to in ideal conditions.
+
+        :param matrix: The 3D coordinates of the compound.
+        :return: The 3D coordinates of 3 points that bound the largest surface.
+    """
+
     elements = []
     coordinates = []
 
@@ -171,9 +179,14 @@ def rotation_matrix_calculator(normal_vector):
 
 def reorient_coordinates(base_matrix, largest_surface_points):
     """
-    Reorient the coordinates of the shape based on the identified surface plane,
-    ensuring the largest surface is the uppermost parallel to the XY plane.
+        Reorients the coordinates of the shape based on the identified largest
+        surface plane, ensuring the largest surface is the uppermost parallel to the XY plane.
+
+        :param base_matrix: The current 3D coordinates of the compound.
+        :param largest_surface_points: The current 3D coordinates of the largest surface.
+        :return new_base_matrix: The reoriented 3D coordinates of the compound with the largest surface at the top.
     """
+
     if len(largest_surface_points) != 3:
         raise ValueError("Exactly three points are required to define a plane.")
 
@@ -226,11 +239,20 @@ def reorient_coordinates(base_matrix, largest_surface_points):
     # Apply the translation to all coordinates
     translated_coordinates = coordinates + translation
 
-    # Format the new base_matrix with translated coordinates
+    # Process the base_matrix to translate coordinates and create new_base_matrix
     new_base_matrix = []
     for i, line in enumerate(base_matrix):
         parts = line.split()
         new_x, new_y, new_z = translated_coordinates[i]
         new_base_matrix.append(f'{parts[0]} {new_x:.10f} {new_y:.10f} {new_z:.10f}')
 
-    return new_base_matrix
+    # Extract coordinates from new_base_matrix
+    coordinates = np.array([[float(x) for x in line.split()[1:]] for line in new_base_matrix])
+
+    # Find the maximum z-coordinate
+    z_max = np.max(coordinates[:, 2])
+
+    # Get surface points, including all three coordinates (x, y, z)
+    surface_points = coordinates[coordinates[:, 2] == z_max]
+
+    return new_base_matrix, surface_points

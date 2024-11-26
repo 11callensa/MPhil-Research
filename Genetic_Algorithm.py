@@ -22,11 +22,10 @@ def set_materials():
     compound_name = list(compound.keys())[0]
     compound_ID = compound[compound_name]
 
-    return hydrogen, compound_name, compound_ID
+    return hydrogen, compound_ID
 
 
 def set_PT():
-
     temperature = 20
     pressure = 100
 

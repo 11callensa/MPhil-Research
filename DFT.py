@@ -45,4 +45,4 @@ def calculate_energy(atoms):
     mf.xc = 'b3lyp'                                                                                                     # Choose an exchange-correlation functional
     energy = mf.kernel()
 
-    return 27.2114 * energy, element_count                                                                              # Convert from Hartree to eV
+    return 27.2114 * energy                                                                                             # Convert from Hartree to eV
