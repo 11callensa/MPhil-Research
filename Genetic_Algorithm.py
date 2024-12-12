@@ -10,49 +10,50 @@ key = os.getenv("MATERIALS_KEY")
 def set_materials():
 
     hydrogen = 'H2'
+
+    # --------- Simple Hydrides ------- #
+
+    compound_hydrides = {'LiH': ['mp-23703'], 'NaH': ['mp-23870'], 'CaH2': ['mp-23713'], 'TiH2': ['mp-24726'],
+                         'ZrH2': ['mp-24286'], 'VH2': ['mp-24728']}
+
     # compound = {'LiH': ['mp-23703']}
+    # compound = {'NaH': ['mp-23870']}
+    # compound = {'CaH2': ['mp-23713']}
+    # compound = {'TiH2': ['mp-24726']}
+    # compound = {'ZrH2': ['mp-24286']}
+    compound = {'VH2': ['mp-24728']}
 
-    # compound = {'LaNi5H6': ['mp-1222987']}
+    # compound = {'MgH2': ['mp-23710']}                 # Version 1
+    # compound = {'MgH2': ['mp-23711']}                 # Version 2
 
-    compound = {'MgH2': ['mp-23710']}
+
+    # ---------- Complex Hydrides ----------- #
+
+    compound_complex = {'NaBH4': ['mp-38725'], 'LiAl4': ['mp-27653'], 'Mg(BH4)2': ['mp-1200811']}
 
     # compound = {'NaBH4': ['mp-38725']}
+    # compound = {'LiAl4': ['mp-27653']}
+    # compound = {'Mg(BH4)2': ['mp-1200811']}
+
+
+    # ---------- Alanates ---------- #
+
+    compound_alanates = {'NaAlH4': ['mp-23704'], 'LiAlH4': ['mp-27653'], 'KAlH4': ['mp-31097']}
+
     # compound = {'NaAlH4': ['mp-23704']}
+    # compound = {'LiAlH4': ['mp-27653']}
+    # compound = {'KAlH4': ['mp-31097']}
+
+
+    # ---------- Intermetallic Compounds --------- #
+
+    compound_intermetallic = {'LaNi5H6': ['mp-1222987'], 'TiFeH2': ['mp-1079106'], 'Mg2NiH3': ['mp-697331']}
+
+    # compound = {'LaNi5H6': ['mp-1222987']}
+    # compound = {'TiFeH2': ['mp-1079106']}
+    # compound = {'Mg2NiH3': ['mp-697331']}
 
     compound_name = list(compound.keys())[0]
     compound_ID = compound[compound_name]
 
     return hydrogen, compound_ID
-
-
-def set_PT():
-    temperature = 20
-    pressure = 100
-
-    return temperature, pressure
-
-
-def calculate_spacing(temp_celsius, pressure_kpa):
-    # Constants
-    k_B = 1.38e-23  # Boltzmann constant in J/K
-    conversion_factor = 10 ** 10  # To convert meters to angstroms
-
-    # Convert temperature to Kelvin
-    temp_kelvin = temp_celsius + 273.15
-
-    print("Temp kelvin: ", temp_kelvin)
-
-    # Convert pressure to Pascals
-    pressure_pa = pressure_kpa * 1e3
-
-    print("Pressure Pa: ", pressure_pa)
-
-    # Calculate intermolecular spacing in meters
-    d_meters = (k_B * temp_kelvin / pressure_pa) ** (1/3)
-
-    # Convert spacing to angstroms
-    d_angstroms = d_meters * conversion_factor
-
-    print("D Angstroms: ", d_angstroms)
-
-    return d_angstroms

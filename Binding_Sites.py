@@ -1,15 +1,14 @@
-from scipy.spatial import Delaunay, ConvexHull
-from matplotlib.path import Path
-from pyscf import gto, dft
-from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-from collections import Counter
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+from matplotlib.path import Path
+from tqdm import tqdm
 from scipy.interpolate import griddata
 from scipy.spatial.distance import cdist
+from scipy.spatial import Delaunay, ConvexHull
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from DFT import get_spin
+from DFT import calculate_energy
 
 
 def mesh(compound_xyz, surface_points):
@@ -34,7 +33,7 @@ def mesh(compound_xyz, surface_points):
     x_min, x_max = np.min(surface_points[:, 0]), np.max(surface_points[:, 0])
     y_min, y_max = np.min(surface_points[:, 1]), np.max(surface_points[:, 1])
 
-    resolution = 7
+    resolution = 8
     x_grid = np.linspace(x_min, x_max, resolution)
     y_grid = np.linspace(y_min, y_max, resolution)
     x_mesh, y_mesh = np.meshgrid(x_grid, y_grid)
@@ -85,24 +84,12 @@ def energy_profile(compound_xyz, mesh_points):
     energies = []
     positions = []
 
-    for point in tqdm(mesh_points, desc="Computing energies", unit="point"):
+    for point in tqdm(mesh_points, desc="Computing energies (XY Placement)", unit="point"):
+
         hydrogen_position = point + [0, 0, 1.0]
         all_atoms = compound_xyz + [f'H {hydrogen_position[0]} {hydrogen_position[1]} {hydrogen_position[2]}']
 
-        symbols = [line.split()[0] for line in all_atoms]
-        element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
-
-        mol = gto.M(
-            verbose=0,
-            atom=all_atoms,
-            basis='def2-svp',
-            unit='Angstrom',
-            spin=get_spin(element_count)
-        )
-
-        mf = dft.RKS(mol)
-        mf.xc = 'b3lyp'
-        energy = mf.kernel() * 27.2114
+        energy = calculate_energy(all_atoms)
 
         energies.append(energy)
         positions.append(point)
@@ -110,7 +97,7 @@ def energy_profile(compound_xyz, mesh_points):
     return np.array(positions), np.array(energies)
 
 
-def find_local_minima(positions, energies, distance_threshold=1.0):
+def placement_xy(positions, energies, distance_threshold=1.0):
     """
         Compares each mesh point's energy with the energies of the surrounding mesh points
         to identify local minima energy locations.
@@ -118,7 +105,7 @@ def find_local_minima(positions, energies, distance_threshold=1.0):
         :param positions: Mesh points.
         :param energies: Associated energies of all mesh points.
         :param distance_threshold: Nearest points means any points within a 1 angstrom radius.
-        :return:
+        :return: 2D coordinates of the local minima positions.
     """
 
     local_minima_indices = []
