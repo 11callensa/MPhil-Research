@@ -1,7 +1,6 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-import time
 
 from tqdm import tqdm
 
@@ -48,7 +47,7 @@ def placement_z(local_minima, binding_sites, energies, compound_matrix, surface_
 
     z_surface = surface_points[:, 2]
     z_max = np.max(z_surface)
-    z_positions = z_max + np.arange(0, 10, 0.4)
+    z_positions = z_max + np.arange(0.1, 15, 0.1)
 
     # placed_molecules = []
     hydrogen_final = []
@@ -123,4 +122,16 @@ def placement_z(local_minima, binding_sites, energies, compound_matrix, surface_
             hydrogen_final.append(f"H {atom2_x:.10f} {atom2_y:.10f} {min_position:.10f}")
 
     print("Hydrogen Final: ", hydrogen_final)
-    return hydrogen_final
+
+    symbols = [line.split()[0] for line in hydrogen_final]
+    num_molecules = len(symbols)/2
+
+    coordinates = [
+        [round(float(coord), 4) for coord in atom.split()[1:]]
+        for atom in hydrogen_final
+    ]
+
+    # Group coordinates into pairs
+    paired_coordinates = [coordinates[i:i + 2] for i in range(0, len(coordinates), 2)]
+
+    return hydrogen_final, num_molecules, paired_coordinates

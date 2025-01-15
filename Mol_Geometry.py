@@ -255,4 +255,83 @@ def reorient_coordinates(base_matrix, largest_surface_points):
     # Get surface points, including all three coordinates (x, y, z)
     surface_points = coordinates[coordinates[:, 2] == z_max]
 
-    return new_base_matrix, surface_points
+    return new_base_matrix, surface_points, rotation_matrix, translation
+
+
+def centre_coords(base_matrix):
+
+    """
+    Centers a crystal's atoms around (0, 0, 0).
+
+    Parameters:
+        base_matrix (list of str): Each element is a string representing an atom
+                                with its element type and 3D coordinates.
+
+    Returns:
+        list of str: A list of strings representing the centered atoms.
+    """
+    # Extract coordinates from input
+    coordinates = []
+    atom_labels = []
+    for atom in base_matrix:
+        parts = atom.split()
+        atom_labels.append(parts[0])
+        coordinates.append([float(x) for x in parts[1:]])
+
+    # Convert to a NumPy array
+    coordinates = np.array(coordinates)
+
+    # Compute the geometric center (mean position)
+    center = np.mean(coordinates, axis=0)
+
+    # Subtract the center from each coordinate to center the crystal
+    centered_coordinates = coordinates - center
+
+    # Format the centered atoms back into strings
+    centered_atom_list = []
+    for i, coords in enumerate(centered_coordinates):
+        centered_atom_list.append(f"{atom_labels[i]} {' '.join(f'{x:.10f}' for x in coords)}")
+
+    return centered_atom_list, center
+
+
+def unorient_minima(local_minima_positions, rotation_matrix, translation_vector, center):
+    """
+    Finds the equivalent coordinates of the local minima on the un-oriented shape.
+
+    :param local_minima_positions: np.array, coordinates in the oriented shape.
+    :param rotation_matrix: np.array, 3x3 matrix used to rotate the shape during orientation.
+    :param translation_vector: np.array, 1x3 vector used to translate the shape during orientation.
+    :param center: np.array, center to be subtracted after reorientation.
+    :return: np.array, equivalent coordinates in the un-oriented shape.
+    """
+    # Reverse the translation: Subtract the translation vector
+    translated_back = local_minima_positions - translation_vector
+
+    # Reverse the rotation: Apply the inverse rotation matrix
+    rotation_matrix_inverse = np.linalg.inv(rotation_matrix)
+    original_coordinates = np.dot(translated_back, rotation_matrix_inverse.T)
+
+    # Subtract the center from each set of coordinates
+    original_coordinates_centered = original_coordinates - center
+
+    return original_coordinates_centered
+
+
+def unorient_mol(paired_coordinates, rotation_matrix, translation_vector, center):
+    transformed_coordinates = []
+
+    for pair in paired_coordinates:
+        transformed_pair = []
+        for coord in pair:
+            # Apply rotation matrix to the coordinates and then apply translation vector
+            transformed_coord = np.dot(rotation_matrix, coord) + translation_vector
+
+            # Subtract the center from each transformed coordinate
+            centered_coord = transformed_coord - center
+
+            transformed_pair.append(centered_coord.tolist())
+
+        transformed_coordinates.append(transformed_pair)
+
+    return transformed_coordinates

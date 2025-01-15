@@ -1,7 +1,8 @@
 import os
 import numpy as np
 
-from mp_api.client import MPRester
+from pymatgen.ext.matproj import MPRester
+from pymatgen.analysis.local_env import CrystalNN
 from ase.io import read
 from dotenv import load_dotenv
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -44,10 +45,16 @@ def extract_compound(material_id):
 
     with MPRester(key) as m:                                                                                            # Access API using key
 
-        structure = m.get_structure_by_material_id(material_id)
+        print(material_id)
+        material_data = m.get_entry_by_material_id(material_id)
+        oxidation_states = material_data[0].data.get('oxidation_states')
+        print("Oxidation States: ", oxidation_states)
 
+        structure = m.get_structure_by_material_id(material_id)
         sga = SpacegroupAnalyzer(structure)
         conventional_structure = sga.get_conventional_standard_structure()
+
+        print("Conventional Structure: ", conventional_structure)
 
     atoms = [site.species_string for site in conventional_structure]                                                    # Extract atoms
     positions = [site.coords for site in conventional_structure]                                                        # Extract positions
@@ -57,4 +64,4 @@ def extract_compound(material_id):
     for symbol, pos in zip(atoms, positions):                                                                           # Format in xyz format
         xyz_format.append(f"{symbol} {pos[0]:.10f} {pos[1]:.10f} {pos[2]:.10f}")
 
-    return xyz_format
+    return xyz_format, oxidation_states

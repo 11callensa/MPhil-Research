@@ -33,7 +33,8 @@ def mesh(compound_xyz, surface_points):
     x_min, x_max = np.min(surface_points[:, 0]), np.max(surface_points[:, 0])
     y_min, y_max = np.min(surface_points[:, 1]), np.max(surface_points[:, 1])
 
-    resolution = 8
+    resolution = 10   # Mesh Coarseness
+    print("Mesh coarseness: ", resolution)
     x_grid = np.linspace(x_min, x_max, resolution)
     y_grid = np.linspace(y_min, y_max, resolution)
     x_mesh, y_mesh = np.meshgrid(x_grid, y_grid)
@@ -93,6 +94,8 @@ def energy_profile(compound_xyz, mesh_points):
 
         energies.append(energy)
         positions.append(point)
+
+    print("Completed energy profile")
 
     return np.array(positions), np.array(energies)
 

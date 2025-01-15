@@ -1,37 +1,19 @@
-from pyscf import gto, dft, lib
+
 import numpy as np
 import ctypes
+
+from pyscf import gto, dft, lib
 from collections import Counter
+
+from Compound_Properties import get_spin
 
 
 _loaderpath = 'libdftd3-master/lib'
 libdftd3 = np.ctypeslib.load_library('libdftd3.so', _loaderpath)
 
 
-def get_spin(element_list):
-
-    unpaired_electrons = {
-        'H': 1, 'Li': 1, 'Be': 0, 'B': 1, 'C': 0,
-        'N': 3, 'O': 2, 'F': 1, 'Ne': 0, 'Na': 1,
-        'Al': 1, 'La': 1, 'Ni': 2, 'Mg': 0, 'V': 3,
-        'Zr': 2, 'Ca': 0, 'Ti': 2, 'Fe': 4
-        }
-
-    total_electrons = 0
-
-    for element, count in element_list:
-        count = int(count) if count else 1  # Default to 1 if no number is given
-        if element in unpaired_electrons:
-            total_electrons += unpaired_electrons[element] * count  # Accumulate unpaired electrons
-        else:
-            print(f"Warning: Element '{element}' not defined in unpaired electrons.")
-
-    if total_electrons % 2 == 0:
-        total_unpaired = 0
-    else:
-        total_unpaired = 1
-
-    return total_unpaired
+xe_funcs = ['b3-lyp', 'pbe', 'b97-d']
+select_xe = 0
 
 
 def dftd3(mf, mol):
@@ -50,7 +32,7 @@ def dftd3(mf, mol):
         symb = mol.atom_pure_symbol(ia)
         itype[ia] = lib.parameters.NUC[symb]
 
-    func = 'b3-lyp'.encode()  # Encoding required for ctypes
+    func = xe_funcs[select_xe].encode()  # Encoding required for ctypes
     version = 4
     tz = 0
     edisp = np.zeros(1)
@@ -99,23 +81,3 @@ def calculate_energy(atoms):
     corrected_energy = dftd3(mf, mol)                                                                                   # Call the dftd3 function
 
     return corrected_energy                                                                                             # Convert from Hartree to eV
-
-
-# def calculate_energy(atoms):
-#
-#     symbols = [line.split()[0] for line in atoms]
-#     element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
-#
-#     mol = gto.M(                                                                                                        # Define the molecule in PySCF
-#         verbose=0,
-#         atom=atoms,
-#         basis='def2-svp',
-#         unit='Angstrom',
-#         spin=get_spin(element_count)
-#     )
-#
-#     mf = dft.RKS(mol)                                                                                                   # Run DFT calculation
-#     mf.xc = 'b3lyp'                                                                                                     # Choose an exchange-correlation functional
-#     energy = mf.kernel()
-#
-#     return 27.2114 * energy
