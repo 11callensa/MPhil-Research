@@ -1,68 +1,188 @@
 import csv
+import tkinter as tk
+from tkinter import filedialog
 
-from Compound_Database import set_materials
-from Training_Creator import training_data_creator
-import keras
-from keras.models import Sequential, Model, load_model
-from keras.optimizers import Adam
+from Compound_Database import set_train_materials
+from Training_Creator import data_creator
+from ML_Model import GNN_training, GNN_testing
 
 
-# run_choice = input("Enter 1) Training data creation mode, 2) Training mode or 3) Testing on a preloaded model mode?: ")
+# run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3) Test on a preloaded model: ")
 
 run_choice = '1'
 
 if run_choice == '1':
 
-    hydrogen, compound_ID_set = set_materials()
+    hydrogen, compound_ID_set = set_train_materials()
     print("Materials set")
 
-    csv_filename = 'compound_properties.csv'
-    try:
+    test_train_choice = input("Do you want to extract features for 1) Training or 2) Testing?: ")
 
-        with open(csv_filename, mode='x', newline='') as file:
+    if test_train_choice == '1':
 
-            print("File opened")
+        diffusion_filename = 'diffusion_training.csv'
+        energy_filename = 'energy_training.csv'
+        temperature_filename = 'temperature_training.csv'
 
-            writer = csv.writer(file)
-            writer.writerow(['Compound', 'Node Features', 'Edge Features', 'Edge Indices', 'System Features', 'Masks'])
+        file_data = [
+            (diffusion_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
+                                  'Node Features Optimised Combined', 'Edge features Optimised Combined',
+                                  'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
+                                  'Diffusion Output Coords', 'Uncertain Features', 'Num. Fixed Atoms',
+                                  'Num. Placed H Atoms']),
+            (energy_filename, ['Compound', 'Node Features (Triple)', 'Edge Features (Triple)',
+                               'Edge Indices (Triple)', 'Energy Input Features (Triple)',
+                               'Energy Output Features (Triple)', 'Uncertain Features', 'Num. Fixed Atoms',
+                               'Num. Placed H Atoms']),
+            (temperature_filename, ['Compound', 'Node Features Optimised Combined', 'Edge Features Optimised Combined',
+                                    'Edge Indices Combined', 'Temp. Input Features', 'Temp. Output Features',
+                                    'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed H Atoms'])
+        ]
 
-    except FileExistsError:
-        print(f"File '{csv_filename}' already exists. Appending new rows.")
+        for filename, header in file_data:
+            try:
+                # Try creating the file in exclusive ('x') mode
+                with open(filename, mode='x', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(header)  # Write the header if the file is new
+                    print(f"{filename} setup complete (new file created).")
 
-    for compound in compound_ID_set:
+            except FileExistsError:
+                print(f"File '{filename}' already exists. Appended new row.")
 
-        compound_ID = compound_ID_set[compound][0]
-        edge_indices = compound_ID_set[compound][1]
+        for compound in compound_ID_set:
 
-        try:
-            print(f"Processing Compound: {compound}")
+            compound_ID = compound_ID_set[compound]
 
-            node_features, edge_features, system_features, masks = training_data_creator(hydrogen, compound_ID, edge_indices)
+            try:
+                print(f"Processing Compound: {compound}")
 
-            with open(csv_filename, mode='a', newline='') as file:  # Append mode
-                writer = csv.writer(file)
-                writer.writerow([f'{compound}', str(node_features), str(edge_features), str(edge_indices), str(system_features), str(masks)])
+                training_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)
 
-            print(f"Saved data for {compound} to CSV.")
+                (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
+                 diffusion_output_features, energy_input_features, energy_output_features,
+                 temp_input_features, temp_output_features, uncertain_features, num_fixed, num_H) = training_features
 
-        except Exception as e:
-            print(f"Error processing {compound}: {e}")
+                with open(diffusion_filename, mode='a', newline='') as file:  # Append mode
+                    writer = csv.writer(file)
+                    writer.writerow([f'{compound}', str(node_features[0]),
+                                     str(edge_features[0]), str(node_features[1]), str(edge_features[1]),
+                                     str(edge_indices[0]), str(diffusion_input_features), str(diffusion_init_coords),
+                                     str(diffusion_output_features), str(uncertain_features), str(num_fixed), str(num_H)])
+
+                print(f"Saved diffusion training data for {compound} to {diffusion_filename} CSV.")
+
+                with open(energy_filename, mode='a', newline='') as file1:  # Append mode
+                    writer = csv.writer(file1)
+                    writer.writerow([f'{compound}', str([node_features[1], node_features[2], node_features[4]]),
+                                     str([edge_features[1], edge_features[2], edge_features[4]]),
+                                     str(edge_indices), str(energy_input_features), str(energy_output_features),
+                                     str(uncertain_features), str(num_fixed), str(num_H)])
+
+                print(f"Saved energy training data for {compound} to {energy_filename} CSV.")
+
+                with open(temperature_filename, mode='a', newline='') as file2:  # Append mode
+                    writer = csv.writer(file2)
+                    writer.writerow([f'{compound}', str(node_features[1]), str(edge_features[1]), str(edge_indices[0]),
+                                     str(temp_input_features), str(temp_output_features), str(uncertain_features),
+                                     str(num_fixed), str(num_H)])
+
+                print(f"Saved temperature training data for {compound} to {temperature_filename} CSV.")
+
+            except Exception as e:
+                print(f"Error processing {compound}: {e}")
+
+    elif test_train_choice == '2':
+
+        diffusion_test_filename = 'diffusion_testing.csv'
+        energy_test_filename = 'energy_testing.csv'
+        temperature_test_filename = 'temperature_testing.csv'
+
+        file_data = [(diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
+                                 'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
+                                 'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms']),
+                     (energy_test_filename, ['Compound', 'Node Features (Triple)', 'Edge Features (Triple)', 'Edge Indices (Triple)',
+                                             'Energy Input Features (Triple)', 'Uncertain Features', 'Num. Fixed Atoms',
+                                             'Num. Placed H Atoms']),
+                     (temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
+                                                  'Edge Features Optimised Combined', 'Edge Indices Combined',
+                                                  'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
+
+        for filename, header in file_data:
+            try:
+                # Try creating the file in exclusive ('x') mode
+                with open(filename, mode='x', newline='') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(header)  # Write the header if the file is new
+                    print(f"{filename} setup complete (new file created).")
+
+            except FileExistsError:
+                print(f"File '{filename}' already exists. Appended new row.")
+
+        for compound in compound_ID_set:
+
+            compound_ID = compound_ID_set[compound][0]
+
+            try:
+                print(f"Processing Compound: {compound}")
+
+                testing_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)
+
+                (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
+                 energy_input_features, uncertain_features, num_fixed, num_H) = testing_features
+
+                with open(diffusion_test_filename, mode='a', newline='') as file:  # Append mode
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        [f'{compound}', str(node_features[0]), str(edge_features[0]), str(edge_indices[0]),
+                         str(diffusion_input_features), str(diffusion_init_coords), str(uncertain_features),
+                         str(num_fixed), str(num_H)])
+
+                print(f"Saved diffusion testing data for {compound} to CSV.")
+
+                with open(energy_test_filename, mode='a', newline='') as file:  # Append mode
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        [f'{compound}', str(node_features), str(edge_features), str(edge_indices),
+                         str(energy_input_features), str(uncertain_features), str(num_fixed), str(num_H)])
+
+                print(f"Saved energy testing data for {compound} CRYSTAL ALONE to CSV.")
+
+                with open(temperature_test_filename, mode='a', newline='') as file:  # Append mode
+                    writer = csv.writer(file)
+                    writer.writerow(
+                        [f'{compound}', '' , '', str(edge_indices[0]), '', str(uncertain_features), str(num_fixed), str(num_H)])
+
+                print(f"Saved temperature data for {compound} to CSV.")
+
+            except Exception as e:
+                print(f"Error processing {compound}: {e}")
 
 
 elif run_choice == '2':
 
-    print("Select the .csv file containing the training data")
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+    file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+
+    if file_path:  # Ensure the user selected a file
+        GNN_training(file_path)
+    else:
+        print("No file selected. Please try again.")
 
 
 elif run_choice == '3':
 
-    model_name = input("Input the name of the pre-trained model you want to use: ")
+    identifier = input("Input the identifier of the pre-trained model you want to use (GNN_model_{identifier}.pth): ")
+    model_name = f'GNN_model_{identifier}.pth'
+    file_path = f'GNN Models/{model_name}'
 
-    try:
-        model = load_model(f"{model_name}.h5", compile=False)
-        model.compile(loss="logcosh", optimizer=Adam(0.001), metrics=["mean_absolute_error"])
+    root = tk.Tk()
+    root.withdraw()  # Hide the root window
+    test_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
 
-    except Exception as e:
-        print(f"Error finding the saved model {model_name}: {e}")
-
+    if file_path:  # Ensure the user selected a file
+        GNN_testing(file_path, test_path)
+    else:
+        print("No file selected. Please try again.")
 

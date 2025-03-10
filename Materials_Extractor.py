@@ -2,10 +2,14 @@ import os
 import numpy as np
 
 from pymatgen.ext.matproj import MPRester
+from pymatgen.io.cif import CifWriter
 from pymatgen.analysis.local_env import CrystalNN
 from ase.io import read
 from dotenv import load_dotenv
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 load_dotenv()
 
@@ -35,7 +39,7 @@ def extract_hydrogen(file_path):
         return None, None
 
 
-def extract_compound(material_id):
+def extract_compound(material_id, name):
     """
         Takes in the Material Project ID and extracts xyz coordinates of the compound.
 
@@ -45,23 +49,259 @@ def extract_compound(material_id):
 
     with MPRester(key) as m:                                                                                            # Access API using key
 
-        print(material_id)
+        print("Material ID: ", material_id)
+
         material_data = m.get_entry_by_material_id(material_id)
-        oxidation_states = material_data[0].data.get('oxidation_states')
-        print("Oxidation States: ", oxidation_states)
+        energy_above_hull = m.get_entry_by_material_id(material_id, property_data=['energy_above_hull'])[0].data.get(
+            'energy_above_hull')
+
+        try:
+            elasticity_doc = m.materials.elasticity.search(material_ids=[material_id])[0]
+        except (IndexError, AttributeError, KeyError):
+            elasticity_doc = None
+
+        print(elasticity_doc)
+
+        # Initialize variables with default values (None) in case input is required
+        bulk_voigt = None
+        bulk_reuss = None
+        shear_voigt = None
+        shear_reuss = None
+        poisson_ratio = None
+
+        # If elasticity_doc is None, prompt the user for inputs
+        if elasticity_doc.bulk_modulus is not None:
+            bulk_voigt = elasticity_doc.bulk_modulus.voigt
+            bulk_reuss = elasticity_doc.bulk_modulus.reuss
+            shear_voigt = elasticity_doc.shear_modulus.voigt
+            shear_reuss = elasticity_doc.shear_modulus.reuss
+            poisson_ratio = elasticity_doc.homogeneous_poisson
+
+            avg_bulk = (bulk_voigt + bulk_reuss) / 2
+            avg_shear = (shear_voigt + shear_reuss) / 2
+
+        else:
+            print("Elasticity document retrieval failed or returned None.")
+            print("You can manually input the required values.")
+
+            avg_bulk, avg_shear, poisson_ratio = manual_input()
+
+        print("Energy Above Hull: ", energy_above_hull)
+        print("Average Bulk Modulus: ", avg_bulk)
+        print("Average Shear Modulus: ", avg_shear)
+        print("Poisson's Ratio: ", poisson_ratio)
+
+        adsorption_temp = input("Input the compound's adsorption temperature in K: ")
+        desorption_temp = input("Input the compound's desorption temperature in K: ")
+
+        print("Adsorption Temperature: ", adsorption_temp)
+        print("Desorption Temperature: ", desorption_temp)
+
+        extracted_input_features = [energy_above_hull]
+        extracted_output_features = [adsorption_temp, desorption_temp]
+
+        uncertain_features = [avg_bulk, avg_shear, poisson_ratio]
 
         structure = m.get_structure_by_material_id(material_id)
-        sga = SpacegroupAnalyzer(structure)
+        supercell_structure = structure * (3, 3, 3)
+
+        sga = SpacegroupAnalyzer(supercell_structure)
         conventional_structure = sga.get_conventional_standard_structure()
 
-        print("Conventional Structure: ", conventional_structure)
+        cif_writer = CifWriter(conventional_structure)
+        cif_writer.write_file(f"CIF Files/{name}_supercell.cif")
 
-    atoms = [site.species_string for site in conventional_structure]                                                    # Extract atoms
-    positions = [site.coords for site in conventional_structure]                                                        # Extract positions
+        print(f"CIF file saved as '{name}_supercell.cif'.")
 
+        task = True
+        while task:
+            choice = input(
+                "Pause - 1) Open saved CIF file in Vesta. \n"
+                "2) Click Export Data and select VASP format - name the file in the format {chemical_name}_supercell.vasp.\n"
+                "3) Click Save and select 'Cartesian Coordinates'.\n"
+                "4) From the drop down menu select 'Output coordinates of all displayed atoms', click ok.\n"
+                "5) Return to the python program and type 'y' to continue: \n")
+
+            if choice.lower() == 'y':  # Check for lowercase 'y'
+                task = False  # Exit the loop
+            else:
+                print("Please complete the task and type 'y' to continue.")
+
+    with open(f"POSCAR Files/{name}_supercell.vasp", "r") as file:
+        lines = file.readlines()
+
+    # Extract atom types and their counts
+    atom_types = lines[5].split()  # Line containing atom types (e.g., Si O)
+    atom_counts = list(map(int, lines[6].split()))  # Line containing counts (e.g., 6 18)
+
+    # Create the atoms list
+    atoms = [atom for atom, count in zip(atom_types, atom_counts) for _ in range(count)]
+
+    coordinate_lines = lines[8:]  # Start reading coordinates from the 9th line
+    positions = []
+
+    for line in coordinate_lines:
+        positions.append(list(map(float, line.split())))
+
+    # Store information in the desired format
     xyz_format = []
+    unique_atoms = set()
 
-    for symbol, pos in zip(atoms, positions):                                                                           # Format in xyz format
+    for symbol, pos in zip(atoms, positions):
         xyz_format.append(f"{symbol} {pos[0]:.10f} {pos[1]:.10f} {pos[2]:.10f}")
+        unique_atoms.add(symbol)
 
-    return xyz_format, oxidation_states
+    oxidation_states = material_data[0].data.get('oxidation_states')
+
+    if oxidation_states is None:
+        oxidation_states = {}  # Create an empty dictionary to store oxidation states
+        for symbol in unique_atoms:
+            state = float(input(f"Input the oxidation state of atom {symbol} within this compound: "))
+            oxidation_states[symbol] = state  # Store in the dictionary
+
+    print("Oxidation states: ", oxidation_states)
+    print("Extracted input features: ", extracted_input_features)
+    print("Extracted output features: ", extracted_output_features)
+
+    return xyz_format, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features
+
+
+def manual_input():
+
+    while True:
+        try:
+            avg_bulk = float(input("Enter the Bulk Modulus in : "))
+            break
+        except ValueError:
+            print("Invalid input. Please enter a numeric value.")
+
+    while True:
+        try:
+            avg_shear = float(input("Enter the Shear Modulus in : "))
+            break
+        except ValueError:
+            print("Invalid input. Please enter a numeric value.")
+
+    while True:
+        try:
+            poisson_ratio = float(input("Enter Poisson's Ratio: "))
+            break
+        except ValueError:
+            print("Invalid input. Please enter a numeric value.")
+
+    return avg_bulk, avg_shear, poisson_ratio
+
+
+def compute_bonds(positions):
+
+    pairs_with_cutoffs = {}
+
+    # Initial user task
+    task = True
+    while task:
+        choice = input(
+            "Pause - 1) In Vesta, click Edit - Bonds. \n"
+            "2) Look at the bonds that exist in the list - add any new bond pairs and cutoff distances and"
+            "satisfy yourself that those are the bonds that actually form in the crystal.\n"
+            "3) Note the bond pairs (e.g., Ti-O) and associated cutoff distances.\n"
+            "4) Return to the python program and type 'y' to continue: \n"
+        )
+        if choice.lower() == 'y':  # Check for lowercase 'y'
+            task = False  # Exit the loop
+        else:
+            print("Please complete the task and type 'y' to continue.")
+
+    # Keep asking for pairs and cutoff distances
+    while True:
+        # Ask for the element pair and cutoff distances
+        pair = input("Enter a pair of elements to form bonds between (e.g., 'Ti-O') or 'done' to stop: ").strip()
+
+        # Exit condition if the user types 'done'
+        if pair.lower() == 'done':
+            break
+
+        # Validate the pair format (you can add more validation if needed)
+        if '-' not in pair:
+            print("Invalid format. Please enter a pair in the format 'Element1-Element2'.")
+            continue
+
+        # Ask for the maximum cutoff distance
+        try:
+            cutoff = float(input(f"Enter the maximum cutoff distance for the pair {pair}: "))
+        except ValueError:
+            print("Invalid cutoff distance. Please enter a valid number.")
+            continue
+
+        # Ask for the minimum cutoff distance with a default value of 0
+        try:
+            min_cutoff = input(f"Enter the minimum cutoff distance for the pair {pair} (default is 0): ").strip()
+            if min_cutoff == '':
+                min_cutoff = 0.0
+            else:
+                min_cutoff = float(min_cutoff)
+        except ValueError:
+            print("Invalid minimum cutoff distance. Setting to default value of 0.")
+            min_cutoff = 0.0
+
+        # Save the pair and cutoff distances to the dictionary
+        pairs_with_cutoffs[pair] = (min_cutoff, cutoff)
+        print(f"Added {pair} with minimum cutoff {min_cutoff} and maximum cutoff {cutoff}.")
+
+    # Print the resulting pairs and their cutoffs
+    print("\nThe following pairs and their cutoff distances were added:")
+    for pair, (min_cutoff, cutoff) in pairs_with_cutoffs.items():
+        print(f"{pair}: min_cutoff = {min_cutoff}, max_cutoff = {cutoff}")
+
+    # Parse positions into separate atom types and coordinates
+    atom_symbols = []
+    atom_coordinates = []
+    for position in positions:
+
+        parts = position.split()  # Split each line into element and coordinates
+        atom_symbols.append(parts[0])  # Atom type (Ti, O, etc.)
+        atom_coordinates.append(np.array([float(parts[1]), float(parts[2]), float(parts[3])]))  # 3D coordinates
+
+    # Convert the list of atom coordinates to a numpy array for vectorized operations
+    atom_coordinates = np.array(atom_coordinates)
+
+    edge_indices = []  # List to hold the bonds (edges)
+
+    # Compute the distance between all pairs of atoms
+    num_atoms = len(atom_coordinates)
+
+    for i in range(num_atoms):
+        for j in range(i + 1, num_atoms):  # Only check each pair once (since bonding is symmetric)
+            # Get the element types of the two atoms
+            element_pair = f"{atom_symbols[i]}-{atom_symbols[j]}"
+
+            # Check if the current pair is in the list of valid pairs
+            if element_pair in pairs_with_cutoffs:
+                # Get the cutoff distances for this pair
+                min_cutoff, max_cutoff = pairs_with_cutoffs[element_pair]
+
+                # Calculate the Euclidean distance between atoms i and j
+                distance = np.linalg.norm(atom_coordinates[i] - atom_coordinates[j])
+
+                # Check if the distance is within the specified range
+                if min_cutoff <= distance <= max_cutoff:
+                    # Append the bond pair (in both directions)
+                    edge_indices.append([i, j])
+
+    return edge_indices
+
+
+def reassociate_coordinates(raw_optimised_xyz, combined_xyz):
+    # Extract element symbols from combined_xyz
+    elements = [line.split()[0] for line in combined_xyz]
+
+    # Ensure number of elements matches number of coordinates
+    if len(elements) != len(raw_optimised_xyz):
+        raise ValueError("Mismatch between number of atoms and coordinates")
+
+    # Format new coordinates with atom labels
+    optimised_xyz = [
+        f"{elem} {x:.10f} {y:.10f} {z:.10f}"
+        for elem, (x, y, z) in zip(elements, raw_optimised_xyz)
+    ]
+
+    return optimised_xyz

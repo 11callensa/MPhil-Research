@@ -1,82 +1,17 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 
 from scipy.spatial import ConvexHull
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
-
-def plot(matrix):
-    elements = []
-    coordinates = []
-
-    # Parse the matrix to extract elements and coordinates
-    for line in matrix:
-        parts = line.split()
-        elements.append(parts[0])
-        coordinates.append([float(parts[1]), float(parts[2]), float(parts[3])])
-
-    coordinates = np.array(coordinates)
-
-    # Plotting
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Get unique elements
-    unique_elements = set(elements)
-
-    # Use a colormap to assign a unique color to each element
-    cmap = cm.get_cmap('tab20', len(unique_elements))  # Choose a colormap, tab20 for distinct colors
-    colors = {elem: cmap(i) for i, elem in enumerate(unique_elements)}
-
-    # Scatter plot for each element type
-    for elem in unique_elements:
-        idx = [i for i, e in enumerate(elements) if e == elem]
-        coords_elem = coordinates[idx]
-        ax.scatter(coords_elem[:, 0], coords_elem[:, 1], coords_elem[:, 2],
-                   color=colors[elem], label=elem, s=50)
-
-    # Compute the convex hull to find the outer surfaces
-    hull = ConvexHull(coordinates)
-
-    # Identify the uppermost surface
-    uppermost_surface_points = None
-    max_avg_z = -np.inf
-
-    for simplex in hull.simplices:
-        # Get the points for the face
-        face_points = coordinates[simplex]
-        avg_z = np.mean(face_points[:, 2])
-
-        # Update if this face has the highest average Z-coordinate
-        if avg_z > max_avg_z:
-            max_avg_z = avg_z
-            uppermost_surface_points = face_points
-
-    # Plot the plane for the uppermost surface
-    if uppermost_surface_points is not None:
-        verts = [uppermost_surface_points]
-        ax.add_collection3d(Poly3DCollection(verts, color='cyan', alpha=0.5, edgecolor='k'))
-
-    # Labels and viewing angle
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.view_init(elev=20, azim=30)
-
-    plt.legend()
-    plt.show()
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 
 
 def surface_finder(matrix):
     """
-        Finds the largest surface of the compound. This will be assumed as the surface
-        the molecules will adsorb to in ideal conditions.
+    Finds all external planes of the compound.
 
-        :param matrix: The 3D coordinates of the compound.
-        :return: The 3D coordinates of 3 points that bound the largest surface.
+    :param matrix: The 3D coordinates of the compound.
+    :return: A list of 3D coordinates defining each external plane.
     """
-
     elements = []
     coordinates = []
 
@@ -87,178 +22,51 @@ def surface_finder(matrix):
 
     coordinates = np.array(coordinates)
 
-    def find_largest_outer_surface(coordinates):
+    def find_all_outer_surfaces(coordinates):
         try:
-            # Attempt to compute the convex hull of all points
             hull = ConvexHull(coordinates)
-            max_area = 0
-            largest_face = None
-            normal_vector = None
-            point_on_plane = None
+            external_faces = []
 
-            # Iterate over all faces (simplices) in the convex hull
+            # Extracting all external faces
             for simplex in hull.simplices:
                 face_points = coordinates[simplex]
+                external_faces.append(face_points)
 
-                # Calculate the area of the face (using the first 3 points of the simplex)
-                v1 = face_points[1] - face_points[0]
-                v2 = face_points[2] - face_points[0]
-                area = 0.5 * np.linalg.norm(np.cross(v1, v2))
-
-                # Calculate the average Z-coordinate for the face
-                avg_z = np.mean(face_points[:, 2])
-
-                # Check if this face has the largest area
-                if area > max_area:
-                    max_area = area
-                    largest_face = face_points
-
-                    # Calculate normal vector and point on plane for the largest face
-                    normal_vector = np.cross(v1, v2)
-                    point_on_plane = face_points[0]
-            if largest_face is not None:
-                d = -np.dot(normal_vector, point_on_plane)
-                return largest_face, normal_vector, d
+            return external_faces
         except Exception as e:
-            # If convex hull fails (e.g., flat geometry), use fallback approach
             print("Convex Hull failed, falling back to direct surface detection.")
+            return []
 
-            # Fallback logic: identify uppermost surface by maximum z-coordinate
-            max_z = np.max(coordinates[:, 2])
-            largest_face = coordinates[coordinates[:, 2] == max_z]
+    # Get all external faces
+    external_faces = find_all_outer_surfaces(coordinates)
 
-            # Plane equation for flat surfaces: normal is perpendicular to the z-axis
-            normal_vector = np.array([0, 0, 1])
-            d = -max_z
-            return largest_face, normal_vector, d
-
-        return np.array([]), None, None
-
-    # Get the largest surface and plane equation
-    largest_surface_points, normal_vector, d = find_largest_outer_surface(coordinates)
-
-    return largest_surface_points
+    return external_faces
 
 
-def rotation_matrix_calculator(normal_vector):
+def compute_volume(matrix):
     """
-    Rotate the surface so that the normal vector aligns with the Z-axis.
+    Computes the volume encapsulated by a set of 3D points using the convex hull.
+
+    Parameters:
+    points (list of lists or np.ndarray): Nx3 array of points in 3D space.
+
+    Returns:
+    float: Volume of the convex hull.
     """
-    normal_vector = normal_vector / np.linalg.norm(normal_vector)  # Normalize the normal vector
-    z_axis = np.array([0, 0, 1])  # Target direction (Z-axis)
-
-    # Compute the axis of rotation: cross product of the normal vector and the Z-axis
-    rotation_axis = np.cross(normal_vector, z_axis)
-
-    # print("Rotation axis: ", rotation_axis)
-
-    # Compute the angle of rotation: dot product between the normal vector and the Z-axis
-    cos_angle = np.dot(normal_vector, z_axis)
-    sin_angle = np.linalg.norm(rotation_axis)
-
-    # print("Cos angle: ", cos_angle)
-    # print("Sin angle: ", sin_angle) #GOOD
-
-    if sin_angle == 0:  # No rotation needed if the normal is already aligned with Z-axis
-        return np.eye(3)
-
-    # Normalize the rotation axis
-    rotation_axis = rotation_axis / sin_angle
-
-    # Compute the rotation matrix using Rodrigues' rotation formula
-    K = np.array([[0, -rotation_axis[2], rotation_axis[1]],
-                  [rotation_axis[2], 0, -rotation_axis[0]],
-                  [-rotation_axis[1], rotation_axis[0], 0]])
-
-    K_squared = np.dot(K, K)
-
-    rotation_matrix = np.eye(3) + K * sin_angle + K_squared * (1 - cos_angle)
-
-    return rotation_matrix
-
-
-def reorient_coordinates(base_matrix, largest_surface_points):
-    """
-        Reorients the coordinates of the shape based on the identified largest
-        surface plane, ensuring the largest surface is the uppermost parallel to the XY plane.
-
-        :param base_matrix: The current 3D coordinates of the compound.
-        :param largest_surface_points: The current 3D coordinates of the largest surface.
-        :return new_base_matrix: The reoriented 3D coordinates of the compound with the largest surface at the top.
-    """
-
-    if len(largest_surface_points) != 3:
-        raise ValueError("Exactly three points are required to define a plane.")
-
-    # Compute the normal vector using the surface points
-    P1 = largest_surface_points[0]
-    P2 = largest_surface_points[1]
-    P3 = largest_surface_points[2]
-
-    # Create vectors from the first point to the other two
-    v1 = P2 - P1
-    v2 = P3 - P1
-
-    # Compute the normal vector to the surface (cross product of v1 and v2)
-    normal_vector = np.cross(v1, v2)
-
-    # Normalize the normal vector
-    normal_vector = normal_vector / np.linalg.norm(normal_vector)
-
-    # Rotate the shape so the plane becomes parallel to the XY plane (normal vector to Z axis)
-    rotation_matrix = rotation_matrix_calculator(normal_vector)
-
-    # Apply the rotation to all coordinates in base_matrix
+    elements = []
     coordinates = []
-    for line in base_matrix:
+
+    for line in matrix:
         parts = line.split()
-        x, y, z = map(float, parts[1:])
-        rotated_point = np.dot(rotation_matrix, np.array([x, y, z]))
-        coordinates.append(rotated_point)
+        elements.append(parts[0])
+        coordinates.append([float(parts[1]), float(parts[2]), float(parts[3])])
 
-    coordinates = np.array(coordinates)
-
-    # Check Z-coordinates of the largest surface points after rotation
-    rotated_surface_points = [np.dot(rotation_matrix, point) for point in largest_surface_points]
-    surface_z_avg = np.mean([point[2] for point in rotated_surface_points])
-
-    # Compare the Z-coordinates of the largest surface to ensure it is at the top
-    rotated_surface_points_set = {tuple(point) for point in rotated_surface_points}
-    other_points_z_avg = np.mean([coord[2] for coord in coordinates if tuple(coord) not in rotated_surface_points_set])
-
-    if surface_z_avg < other_points_z_avg:
-        # Flip the shape by inverting the Z-axis if the surface is below
-        inversion_matrix = np.diag([1, 1, -1])
-        coordinates = np.dot(coordinates, inversion_matrix)
-        rotated_surface_points = np.dot(rotated_surface_points, inversion_matrix)
-
-    # Translate to ensure the surface is at the top
-    max_surface_z = np.max([point[2] for point in rotated_surface_points])
-    translation = np.array([0, 0, -max_surface_z])
-
-    # Apply the translation to all coordinates
-    translated_coordinates = coordinates + translation
-
-    # Process the base_matrix to translate coordinates and create new_base_matrix
-    new_base_matrix = []
-    for i, line in enumerate(base_matrix):
-        parts = line.split()
-        new_x, new_y, new_z = translated_coordinates[i]
-        new_base_matrix.append(f'{parts[0]} {new_x:.10f} {new_y:.10f} {new_z:.10f}')
-
-    # Extract coordinates from new_base_matrix
-    coordinates = np.array([[float(x) for x in line.split()[1:]] for line in new_base_matrix])
-
-    # Find the maximum z-coordinate
-    z_max = np.max(coordinates[:, 2])
-
-    # Get surface points, including all three coordinates (x, y, z)
-    surface_points = coordinates[coordinates[:, 2] == z_max]
-
-    return new_base_matrix, surface_points, rotation_matrix, translation
+    points = np.array(coordinates)  # Ensure it's a NumPy array
+    hull = ConvexHull(points)  # Compute convex hull
+    return hull.volume  # Return the volume
 
 
-def centre_coords(base_matrix):
+def centre_coords(base_matrix, num_center):
 
     """
     Centers a crystal's atoms around (0, 0, 0).
@@ -282,7 +90,7 @@ def centre_coords(base_matrix):
     coordinates = np.array(coordinates)
 
     # Compute the geometric center (mean position)
-    center = np.mean(coordinates, axis=0)
+    center = np.mean(coordinates[:num_center], axis=0)
 
     # Subtract the center from each coordinate to center the crystal
     centered_coordinates = coordinates - center
@@ -295,43 +103,153 @@ def centre_coords(base_matrix):
     return centered_atom_list, center
 
 
-def unorient_minima(local_minima_positions, rotation_matrix, translation_vector, center):
-    """
-    Finds the equivalent coordinates of the local minima on the un-oriented shape.
+def place_hydrogen(matrix, surfaces, bond_length, offset1=6, offset2=3):
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
 
-    :param local_minima_positions: np.array, coordinates in the oriented shape.
-    :param rotation_matrix: np.array, 3x3 matrix used to rotate the shape during orientation.
-    :param translation_vector: np.array, 1x3 vector used to translate the shape during orientation.
-    :param center: np.array, center to be subtracted after reorientation.
-    :return: np.array, equivalent coordinates in the un-oriented shape.
-    """
-    # Reverse the translation: Subtract the translation vector
-    translated_back = local_minima_positions - translation_vector
+    # Compute global centroid to determine outward direction
+    all_points = np.vstack(surfaces)
+    global_centroid = np.mean(all_points, axis=0)
 
-    # Reverse the rotation: Apply the inverse rotation matrix
-    rotation_matrix_inverse = np.linalg.inv(rotation_matrix)
-    original_coordinates = np.dot(translated_back, rotation_matrix_inverse.T)
+    for i, surface in enumerate(surfaces):
+        surface = np.array(surface)
+        ax.add_collection3d(Poly3DCollection([surface], alpha=0.5, edgecolor='k'))
 
-    # Subtract the center from each set of coordinates
-    original_coordinates_centered = original_coordinates - center
+        # Compute the edge lengths
+        A, B, C = surface
+        edge1 = np.linalg.norm(A - B)
+        edge2 = np.linalg.norm(B - C)
+        edge3 = np.linalg.norm(C - A)
+        avg_edge_length = (edge1 + edge2 + edge3) / 3
 
-    return original_coordinates_centered
+        # Skip molecule placement if avg edge length is smaller than bond length
+        if avg_edge_length < bond_length:
+            continue
+
+        # Compute normal vector
+        v1, v2 = B - A, C - A
+        normal = np.cross(v1, v2)
+        normal = normal / np.linalg.norm(normal)
+
+        # Ensure normal points outward
+        centroid = np.mean(surface, axis=0)
+        if np.dot(normal, centroid - global_centroid) < 0:
+            normal = -normal  # Flip normal if pointing inward
+
+        offset_distance = offset2 if i % 2 == 0 else offset1
+
+        # Place the molecule's midpoint at the centroid of the surface
+        # Molecule's center of gravity (midpoint of the bond) should be at centroid
+        P1 = centroid - normal * offset_distance
+        P2 = centroid + normal * offset_distance
+
+        # Ensure the correct bond length
+        # Make sure the distance between P1 and P2 is exactly the bond length
+        P1_offset, P2_offset = P1, P2
+        current_bond_length = np.linalg.norm(P2_offset - P1_offset)
+
+        if current_bond_length == 0:  # Avoid division by zero
+            print(f"Warning: current_bond_length is zero between {P1_offset} and {P2_offset}")
+            continue  # Skip this iteration if the bond length is zero
+
+        scale_factor = bond_length / current_bond_length
+        P2_offset = P1_offset + (P2_offset - P1_offset) * scale_factor
+
+        # Now we need to check if both atoms are within the surface's bounds.
+        def is_within_surface(p, surface):
+            # Check if a point is within the triangle surface using barycentric coordinates
+            A, B, C = surface
+            # Vectors from point to vertices
+            v0, v1, v2 = B - A, C - A, p - A
+            d00, d01, d11, d20, d21 = np.dot(v0, v0), np.dot(v0, v1), np.dot(v1, v1), np.dot(v0, v2), np.dot(v1, v2)
+            denom = d00 * d11 - d01 * d01
+            v = (d11 * d20 - d01 * d21) / denom
+            w = (d00 * d21 - d01 * d20) / denom
+            u = 1 - v - w
+            return u >= 0 and v >= 0 and w >= 0
+
+        # Retry until both atoms are within the surface
+        while not is_within_surface(P1_offset, surface) or not is_within_surface(P2_offset, surface):
+            # If atoms are out of bounds, adjust position
+            P1 = centroid - normal * offset_distance
+            P2 = centroid + normal * offset_distance
+            P1_offset, P2_offset = P1, P2
+            current_bond_length = np.linalg.norm(P2_offset - P1_offset)
+
+            if current_bond_length == 0:  # Avoid division by zero
+                print(f"Warning: current_bond_length is zero between {P1_offset} and {P2_offset}")
+                continue  # Skip this iteration if the bond length is zero
+
+            scale_factor = bond_length / current_bond_length
+            P2_offset = P1_offset + (P2_offset - P1_offset) * scale_factor
+
+        # Compute a direction parallel to the surface (tangent direction)
+        tangent = np.cross(normal, v1)  # Tangent to the surface
+        if np.linalg.norm(tangent) == 0:
+            tangent = np.cross(normal, v2)  # If the first cross product is zero, use the other edge
+        tangent = tangent / np.linalg.norm(tangent) * bond_length  # Scale to bond length
+
+        # Apply offset distance to ensure molecules are outside the surface
+        P1_offset = centroid - tangent / 2 + normal * offset_distance / 2
+        P2_offset = centroid + tangent / 2 + normal * offset_distance / 2
+
+        # Plot points and lines
+        ax.scatter(*P1_offset, color='r', s=50)
+        ax.scatter(*P2_offset, color='b', s=50)
+        ax.add_collection3d(Line3DCollection([[P1_offset, P2_offset]], colors='black', linewidths=2))
+
+        matrix.append(f'H {P1_offset[0]:.10f} {P1_offset[1]:.10f} {P1_offset[2]:.10f}')
+        matrix.append(f'H {P2_offset[0]:.10f} {P2_offset[1]:.10f} {P2_offset[2]:.10f}')
+
+    # Set tick marks every 2 units
+    ax.set_xticks(np.arange(int(np.min(all_points[:, 0])) - 2, int(np.max(all_points[:, 0])) + 2, 2))
+    ax.set_yticks(np.arange(int(np.min(all_points[:, 1])) - 2, int(np.max(all_points[:, 1])) + 2, 2))
+    ax.set_zticks(np.arange(int(np.min(all_points[:, 2])) - 2, int(np.max(all_points[:, 2])) + 2, 2))
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.show()
+
+    return matrix
 
 
-def unorient_mol(paired_coordinates, rotation_matrix, translation_vector, center):
-    transformed_coordinates = []
+def find_centroid(coords):
+    return np.mean(coords, axis=0)
 
-    for pair in paired_coordinates:
-        transformed_pair = []
-        for coord in pair:
-            # Apply rotation matrix to the coordinates and then apply translation vector
-            transformed_coord = np.dot(rotation_matrix, coord) + translation_vector
 
-            # Subtract the center from each transformed coordinate
-            centered_coord = transformed_coord - center
+def find_direction(coords):
+    return coords[1] - coords[0]  # Vector between first two atoms
 
-            transformed_pair.append(centered_coord.tolist())
 
-        transformed_coordinates.append(transformed_pair)
+def find_distances(coords, centroid):
+    return np.linalg.norm(coords - centroid, axis=1)
 
-    return transformed_coordinates
+
+def find_translation(new_coords, prev_centroid):
+    current_centroid = find_centroid(new_coords)
+    return current_centroid - prev_centroid
+
+
+def find_rotation(new_coords, prev_direction):
+    new_direction = find_direction(new_coords)
+    rotation_axis = np.cross(prev_direction, new_direction)
+
+    # Check if the axis is very small, implying collinearity
+    if np.linalg.norm(rotation_axis) < 1e-6:
+        return None, 0  # No rotation needed if the vectors are collinear
+
+    rotation_axis /= np.linalg.norm(rotation_axis)  # Normalize
+    angle = np.arccos(np.dot(prev_direction, new_direction) /
+                      (np.linalg.norm(prev_direction) * np.linalg.norm(new_direction)))
+    return rotation_axis, angle
+
+
+def apply_translation(coords, trans_vec):
+    return coords + trans_vec
+
+
+def apply_rotation(coords, rotation_axis, angle):
+    from scipy.spatial.transform import Rotation as R
+    rot = R.from_rotvec(angle * rotation_axis)
+    return rot.apply(coords)
