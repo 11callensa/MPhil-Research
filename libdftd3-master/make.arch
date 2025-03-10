@@ -1,0 +1,27 @@
+# Make your choice
+ARCH = x86_64-darwin
+
+ifeq ($(ARCH),x86_64-darwin)
+CC = clang
+FC = gfortran
+LN = gfortran
+FCFLAGS = -O2 -fpic
+LNFLAGS = -O2 -fpic
+endif
+
+ifeq ($(ARCH),x86_64-linux-gnu)
+CC = gcc
+FC = gfortran
+LN = gfortran
+FCFLAGS = -O2 -fpic
+LNFLAGS =
+endif
+
+ifeq ($(ARCH),x86_64-linux-intel)
+CC = icc
+FC = ifort
+LN = ifort
+FCFLAGS =
+LNFLAGS = -O2 -fpic
+endif
+
