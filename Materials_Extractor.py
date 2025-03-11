@@ -54,6 +54,7 @@ def extract_compound(material_id, name):
         try:
             energy_above_hull = m.get_entry_by_material_id(material_id, property_data=['energy_above_hull'])[0].data.get(
                 'energy_above_hull')
+
         except:
             detail = m.get_entry_by_material_id(material_id)
             elements = [str(el) for el in detail.composition.elements]
