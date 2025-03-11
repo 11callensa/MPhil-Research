@@ -7,9 +7,7 @@ from pymatgen.analysis.local_env import CrystalNN
 from ase.io import read
 from dotenv import load_dotenv
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+from pymatgen.analysis.phase_diagram import PhaseDiagram
 
 load_dotenv()
 
@@ -52,15 +50,21 @@ def extract_compound(material_id, name):
         print("Material ID: ", material_id)
 
         material_data = m.get_entry_by_material_id(material_id)
-        energy_above_hull = m.get_entry_by_material_id(material_id, property_data=['energy_above_hull'])[0].data.get(
-            'energy_above_hull')
+
+        try:
+            energy_above_hull = m.get_entry_by_material_id(material_id, property_data=['energy_above_hull'])[0].data.get(
+                'energy_above_hull')
+        except:
+            detail = m.get_entry_by_material_id(material_id)
+            elements = [str(el) for el in detail.composition.elements]
+            details = m.get_entries_in_chemsys(elements)
+            phase_diagram = PhaseDiagram(details)
+            energy_above_hull = phase_diagram.get_e_above_hull(detail)
 
         try:
             elasticity_doc = m.materials.elasticity.search(material_ids=[material_id])[0]
         except (IndexError, AttributeError, KeyError):
             elasticity_doc = None
-
-        print(elasticity_doc)
 
         # Initialize variables with default values (None) in case input is required
         bulk_voigt = None
