@@ -15,18 +15,18 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     compound_xyz, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features = extract_compound(compound_ID, name)
 
-    compound_xyz = ['Li 0.0000000000 0.0000000000 0.0000000000', 'Li 0.0000000000 -2.0086193919 -2.0086193919',
-                    'Li 2.0086193919 -2.0086193919 0.0000000000', 'Li 2.0086193919 0.0000000000 -2.0086193919',
-                    'H 0.0000000000 -2.0086193919 0.0000000000', 'H 0.0000000000 0.0000000000 -2.0086193919',
-                    'H 2.0086193919 0.0000000000 0.0000000000', 'H 2.0086193919 -2.0086193919 -2.0086193919']
-
     print("Uncertain TEST features: ", uncertain_features)
 
     ################## Crystal initial alone code ##################
 
     edge_indices_crystal = compute_bonds(compound_xyz)
 
-    save_edges_to_csv(edge_indices_crystal)
+    save = input("Save crystal edge indices to csv file? y/n: ")
+
+    if save == 'y':
+        save_edges_to_csv(edge_indices_crystal)
+    else:
+        print("Crystal edge indices not saved")
 
     print("Compound XYZ: ", compound_xyz)
     print("Edge Indices of the initial crystal alone: ", edge_indices_crystal)
@@ -151,41 +151,8 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
         ###################### Optimisation ######################
 
-        # mol, mf_grad_scan, initial_coordinates = setup_compound(combined_xyz)
-        # raw_optimised_xyz = optimiser(mol, mf_grad_scan, initial_coordinates, num_atoms)
-
-        raw_optimised_xyz = [[-1.05769119,  0.88377819,  1.06264705],
-                            [-1.04843132, -1.02335637, -1.08641292],
-                            [ 0.96998176, -1.16082231,  0.9254738 ],
-                            [ 0.93416292,  0.89730277, -0.9453166 ],
-                            [-0.99042321, -0.91866055,  0.90859759],
-                            [-0.87803216,  0.81048418, -0.90940785],
-                            [ 0.87659563,  0.73869425,  0.85793386],
-                            [ 0.85446915, -0.95907353, -0.93180427],
-                            [-1.00970367, -3.28547723, -1.0586689 ],
-                            [-0.58452318, -2.81170912, -0.63354481],
-                            [ 0.74810459, -3.22450592,  0.73296617],
-                            [ 1.25913186, -3.45033845,  1.24874249],
-                            [ 0.44638802, -0.67925204,  2.61205223],
-                            [ 0.85063651, -1.08650749,  3.12395833],
-                            [-1.38339672,  1.01656587,  3.49198715],
-                            [-0.86354154,  0.53230196,  3.21887648],
-                            [ 3.2122623,  -1.05792248,  0.87902753],
-                            [ 2.72327126, -0.62635142,  0.47691763],
-                            [ 3.02545024,  0.75158712, -0.77765075],
-                            [ 3.32710172,  1.27399649, -1.24138633],
-                            [-3.28920869, -0.92775707, -0.95494387],
-                            [-2.7879272,  -0.54100774, -0.52238075],
-                            [-3.15825745,  0.64161726,  0.91741076],
-                            [-3.43190945,  1.09394603,  1.46315057],
-                            [-0.95036279,  3.15603602,  1.03893172],
-                            [-0.54582345,  2.66429332,  0.61271235],
-                            [ 0.76925715,  3.02640577, -0.74124431],
-                            [ 1.25959762,  3.33100477, -1.23708364],
-                            [-0.49861112, -0.45448672, -2.78476902],
-                            [-0.90644196, -0.83927756, -3.30807953],
-                            [ 1.31978262,  1.37821083, -3.31440276],
-                            [ 0.80809173,  0.85028117, -3.12428943]]
+        mol, mf_grad_scan, initial_coordinates = setup_compound(combined_xyz)
+        raw_optimised_xyz = optimiser(mol, mf_grad_scan, initial_coordinates, num_atoms)
 
         print("Uncentered optimised XYZ: ", raw_optimised_xyz)
 
