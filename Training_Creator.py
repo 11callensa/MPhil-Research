@@ -64,9 +64,6 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     count = my_list_str.count('array')
     print("Number of unique Surfaces: ", count)
 
-    energy_crystal, _ = calculate_energy(centered_xyz)
-    print("Crystal alone energy: ", energy_crystal)
-
     combined_xyz = place_hydrogen(centered_xyz, surface_points, hydrogen_bond, 2.75, 1.5)
     num_H = len(centered_xyz) - num_atoms
 
@@ -148,6 +145,9 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     print("TEST Energy inputs: ", energy_inputs_test)
 
     if test_train == '1':
+
+        energy_crystal, _ = calculate_energy(centered_xyz)
+        print("Crystal alone energy: ", energy_crystal)
 
         ###################### Optimisation ######################
 

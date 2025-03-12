@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from pymatgen.ext.matproj import MPRester
+from mp_api.client import MPRester
 from pymatgen.io.cif import CifWriter
 from pymatgen.analysis.local_env import CrystalNN
 from ase.io import read
@@ -54,7 +54,6 @@ def extract_compound(material_id, name):
         try:
             energy_above_hull = m.get_entry_by_material_id(material_id, property_data=['energy_above_hull'])[0].data.get(
                 'energy_above_hull')
-
         except:
             detail = m.get_entry_by_material_id(material_id)
             elements = [str(el) for el in detail.composition.elements]
@@ -66,6 +65,8 @@ def extract_compound(material_id, name):
             elasticity_doc = m.materials.elasticity.search(material_ids=[material_id])[0]
         except (IndexError, AttributeError, KeyError):
             elasticity_doc = None
+
+        print(elasticity_doc)
 
         # Initialize variables with default values (None) in case input is required
         bulk_voigt = None

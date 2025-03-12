@@ -5,9 +5,10 @@ import ctypes
 from collections import Counter
 from pyscf import lib
 from pyscf import gto, scf, dft
-from pyscf.dft import libxc
 from pyscf.geomopt import berny_solver
 from functools import partial
+import resource
+import psutil
 
 from Compound_Properties import get_spin
 from Mol_Geometry import (find_centroid, find_direction, find_distances, find_translation, find_rotation,
@@ -15,7 +16,6 @@ from Mol_Geometry import (find_centroid, find_direction, find_distances, find_tr
 
 _loaderpath = 'libdftd3-master/lib'
 libdftd3 = np.ctypeslib.load_library('libdftd3.so', _loaderpath)
-
 
 xe_funcs = ['b3-lyp', 'pbe', 'b97-d', 'SVWN', 'b-lyp']
 select_xe = 0
@@ -159,7 +159,7 @@ def setup_compound(atoms):
     return mol, mf_grad_scan, coords_init
 
 
-def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_convergence=1e-3, force_change_convergence=1e-09):
+def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_change_convergence=1e-09):
     prev_coords = coords[:num_compound].copy()
     prev_centroid = find_centroid(prev_coords)
     prev_direction = find_direction(prev_coords)

@@ -4,7 +4,9 @@ from tkinter import filedialog
 
 from Compound_Database import set_train_materials
 from Training_Creator import data_creator
-from ML_Model import GNN_training, GNN_testing
+import Diffusion_Model
+import Energy_Model
+import Temperature_model
 
 
 # run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3) Test on a preloaded model: ")
@@ -161,28 +163,30 @@ if run_choice == '1':
 
 elif run_choice == '2':
 
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
-    file_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+    model_choice = input("Which model do you want to train? 1) Optimisation Model, 2) Energy Model or "
+                         "3) Temperature Model")
 
-    if file_path:  # Ensure the user selected a file
-        GNN_training(file_path)
-    else:
-        print("No file selected. Please try again.")
+    if model_choice == '1':
+        Diffusion_Model.run_training()
+    # elif model_choice == '2':
+    #
+    # elif model_choice == '3':
+    #
+    # else:
+    #     pass
 
 
 elif run_choice == '3':
 
-    identifier = input("Input the identifier of the pre-trained model you want to use (GNN_model_{identifier}.pth): ")
-    model_name = f'GNN_model_{identifier}.pth'
-    file_path = f'GNN Models/{model_name}'
+    model_choice = input("Which type of model do you want to test with? 1) Optimisation Model, 2) Energy Model or "
+                         "3) Temperature Model")
 
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
-    test_path = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
+    if model_choice == '1':
+        Diffusion_Model.run_testing()
+    # elif model_choice == '2':
+    #
+    # elif model_choice == '3':
+    #
+    # else:
 
-    if file_path:  # Ensure the user selected a file
-        GNN_testing(file_path, test_path)
-    else:
-        print("No file selected. Please try again.")
 

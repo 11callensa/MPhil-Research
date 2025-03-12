@@ -4,7 +4,7 @@ h5py==3.12.1
 libclang==18.1.1
 matplotlib==3.9.4
 mendeleev==0.20.1
-mp-api==0.45.1
+mp-api>=0.45.1
 numpy==1.26.4
 pandas==2.2.3
 pyberny==0.6.3
