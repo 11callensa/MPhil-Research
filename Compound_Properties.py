@@ -66,10 +66,13 @@ def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, 
     node_features = []
     coordinates = []
 
-    # Atom bond strength dictionary (this will store user input bond strengths for each pair)
+    # Define fixed atoms
+    fixed_atoms = set(centered_xyz[:num_fixed])
+
+    # Bond strength dictionary
     bond_strengths = {}
 
-    # Iterate through centered_xyz to extract features (first pass only for coordinates)
+    # Extract node features
     for index, current_node in enumerate(centered_xyz):
         node_list = []
         parts = current_node.split()
@@ -80,7 +83,7 @@ def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, 
         y_coord = float(parts[2])
         z_coord = float(parts[3])
 
-        coordinates.append([x_coord, y_coord, z_coord])  # Append to coordinates list
+        coordinates.append([x_coord, y_coord, z_coord])  # Store coordinates
 
         # Get proton, neutron, and electron counts
         mass_number, protons, neutrons, electrons = atom_config(current_node)
@@ -101,72 +104,60 @@ def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, 
 
         node_features.append(node_list)
 
-    # Now calculate bond angles after the coordinates list is fully populated
-    for index, current_node in enumerate(centered_xyz):
-        node_list = node_features[index]  # Retrieve the existing node features
-
-        # Calculate bond angles for the current node
-        connected_edges = [edge for edge in edge_indices if edge[0] == index or edge[1] == index]
-
-        bond_angles = []
-        for i, edge1 in enumerate(connected_edges):
-            for j, edge2 in enumerate(connected_edges):
-                if i < j:  # Avoid duplicates (edge1, edge2) == (edge2, edge1)
-                    # Identify other nodes connected by these edges
-                    node_a = edge1[1] if edge1[0] == index else edge1[0]
-                    node_b = edge2[1] if edge2[0] == index else edge2[0]
-
-                    # Calculate bond angle
-                    coord_center = coordinates[index]  # Current node's coordinates
-                    coord_a = coordinates[node_a]
-                    coord_b = coordinates[node_b]
-                    angle = calculate_bond_angle(coord_a, coord_center, coord_b)
-
-                    # Store bond angle as a regular float (not np.float64)
-                    bond_angles.append(float(angle))  # Use float() instead of np.float64
-
-        # Add summary statistics of bond angles as features
-        if bond_angles:
-            node_list.append(sum(bond_angles) / len(bond_angles))  # Mean bond angle
-            node_list.append(min(bond_angles))  # Minimum bond angle
-            node_list.append(max(bond_angles))  # Maximum bond angle
-        else:
-            node_list.extend([0, 0, 0])  # Default values if no angles exist
-
-        # Update the node features with bond angle stats
-        node_features[index] = node_list
-
     edge_features = []
-    # Ask for user input to assign bond strengths
     for edge in edge_indices:
-        atom1_index = edge[0]
-        atom2_index = edge[1]
 
+        atom1_index, atom2_index = edge
         atom1 = centered_xyz[atom1_index].split()[0]
         atom2 = centered_xyz[atom2_index].split()[0]
 
-        # Check if bond strength for this pair has already been recorded, if not, prompt for input
-        if (atom1, atom2) not in bond_strengths and (atom2, atom1) not in bond_strengths:
-            print(f"For the bond between {atom1} and {atom2} -")
-            # Allow user to manually assign the bond strength based on the atom pair
-            while True:
-                try:
-                    bond_strength = float(input(
-                        f"Enter bond strength for {atom1}-{atom2} (Covalent=1, Ionic=0.75, Metallic=0.5, Alloy=0.25, None=0): "))
-                    if bond_strength not in [0, 0.25, 0.5, 0.75, 1]:
-                        raise ValueError(
-                            "Invalid bond strength value. Please enter one of the following: 1, 0.66, 0.33, or 0.")
-                    bond_strengths[(atom1, atom2)] = bond_strength
-                    break
-                except ValueError as e:
-                    print(e)
+        if flag == 0:
 
-        bond_strength = bond_strengths.get((atom1, atom2)) or bond_strengths.get((atom2, atom1))
+            # Determine if bond is within or outside the compound
+            within_compound = centered_xyz[atom1_index] in fixed_atoms and centered_xyz[atom2_index] in fixed_atoms
+            bond_key = (atom1, atom2, "within") if within_compound else (atom1, atom2, "outside")
 
-        # Get the bond length using edge_lengths function (already in your code)
+            # Ask for user input only if this bond type hasn't been entered before
+            if bond_key not in bond_strengths and (atom2, atom1, bond_key[2]) not in bond_strengths:
+                while True:
+                    try:
+                        bond_context = "WITHIN THE COMPOUND" if within_compound else "OUTSIDE THE COMPOUND"
+                        bond_strength = float(input(
+                            f"Enter bond strength for {atom1}-{atom2} {bond_context} "
+                            f"(Covalent=1, Ionic=0.75, Metallic=0.5, Alloy=0.25, None=0): "
+                        ))
+                        if bond_strength not in [0, 0.25, 0.5, 0.75, 1]:
+                            raise ValueError("Invalid bond strength. Please enter one of: 1, 0.75, 0.5, 0.25, or 0.")
+
+                        bond_strengths[bond_key] = bond_strength
+                        break
+                    except ValueError as e:
+                        print(e)
+
+            # Retrieve bond strength
+            bond_strength = bond_strengths.get(bond_key, bond_strengths.get((atom2, atom1, bond_key[2]), 0))
+
+        else:
+
+            # Check if bond strength for this pair has already been recorded, if not, prompt for input
+            if (atom1, atom2) not in bond_strengths and (atom2, atom1) not in bond_strengths:
+                print(f"For the bond between {atom1} and {atom2} -")
+                # Allow user to manually assign the bond strength based on the atom pair
+                while True:
+                    try:
+                        bond_strength = float(input(
+                            f"Enter bond strength for {atom1}-{atom2} (Covalent=1, Ionic=0.75, Metallic=0.5, Alloy=0.25, None=0): "))
+                        if bond_strength not in [0, 0.25, 0.5, 0.75, 1]:
+                            raise ValueError(
+                                "Invalid bond strength value. Please enter one of the following: 1, 0.66, 0.33, or 0.")
+                        bond_strengths[(atom1, atom2)] = bond_strength
+                        break
+                    except ValueError as e:
+                        print(e)
+
         distance = edge_lengths(edge, coordinates)
 
-        # Append the bond length and strength to edge_features
+        # Append edge features
         edge_features.append([distance, bond_strength])
 
     return node_features, edge_features

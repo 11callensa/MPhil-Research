@@ -1,18 +1,25 @@
 import os
+
+# os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+# os.environ["NUMEXPR_MAX_THREADS"] = "1"
+
+import time
 import numpy as np
 import ctypes
 
 from collections import Counter
 from pyscf import lib
-from pyscf import gto, scf, dft
+from pyscf import gto
 from pyscf.geomopt import berny_solver
 from functools import partial
-import resource
-import psutil
+from mpi4pyscf import scf, dft
 
 from Compound_Properties import get_spin
 from Mol_Geometry import (find_centroid, find_direction, find_distances, find_translation, find_rotation,
                           apply_translation, apply_rotation)
+from External_Saving import save_optimised_coords
+
 
 _loaderpath = 'libdftd3-master/lib'
 libdftd3 = np.ctypeslib.load_library('libdftd3.so', _loaderpath)
@@ -43,8 +50,6 @@ def dftd3(mf, mol):
     tz = 0
     edisp = np.zeros(1)
     grad = np.zeros((mol.natm, 3))
-
-    print("Before wrapper")
 
     # Call the libdftd3 wrapper
     libdftd3.wrapper(
@@ -103,6 +108,8 @@ def setup_compound(atoms):
     symbols = [line.split()[0] for line in atoms]
     element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
 
+    start_time = time.time()
+
     mol = gto.M(  # Define the molecule in PySCF
         verbose=4,
         atom=atoms,
@@ -135,8 +142,8 @@ def setup_compound(atoms):
         except ValueError:
             print("Invalid input detected, using default settings.")
 
-    mf_grad_scan = dft.RKS(mol).nuc_grad_method().as_scanner()
-    mf_grad_scan.base = scf.addons.remove_linear_dep_(mf_grad_scan.base)
+    mf_grad_scan = dft.RKS(mol).density_fit().nuc_grad_method().as_scanner()
+    # mf_grad_scan.base = scf.addons.remove_linear_dep_(mf_grad_scan.base)
     mf_grad_scan.base.verbose = 5
     mf_grad_scan.base.xc = 'pbe0'
     mf_grad_scan.base.init_guess = 'hcore'
@@ -147,12 +154,13 @@ def setup_compound(atoms):
     mf_grad_scan.base.conv_tol = scf_convergence
     mf_grad_scan.base.conv_tol_grad = force_convergence
 
-    mf_grad_scan.base.grids.prune = dft.gen_grid.treutler_prune
+    # mf_grad_scan.base.grids.prune = dft.gen_grid.treutler_prune
     mf_grad_scan.grid_response = False
 
-    os.environ["OMP_NUM_THREADS"] = "4"  # Use 4 CPU cores (adjust as needed)
-
     coords_init = mol.atom_coords()
+
+    end_time = time.time()
+    print("Setup compound time: ", end_time - start_time)
 
     print("Initial coordinates: ", coords_init * lib.param.BOHR)
 
@@ -166,8 +174,12 @@ def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_chang
     # prev_distances = find_distances(prev_coords, prev_centroid)
 
     mf = berny_solver.as_pyscf_method(mol, partial(mf_grad_with_dftd3, mf_grad_scan=mf_grad_scan))
+    mf.direct_scf = True
+    mf.diis = True  # Use DIIS for SCF convergence acceleration
 
     prev_forces_array = None  # Initialize to None
+
+    start_time = time.time()
 
     for step in range(maxsteps):
         print(f"OPTIMISATION STEP {step + 1}")
@@ -175,7 +187,7 @@ def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_chang
         print("Pre optimisation step coords: ", mol.atom_coords() * lib.param.BOHR)
 
         # Perform optimization using the Berny solver
-        _, mol = berny_solver.kernel(mf, maxsteps=6)
+        _, mol = berny_solver.kernel(mf, maxsteps=5)
         current_coords = mol.atom_coords()
 
         print("Post optimised coords: ", mol.atom_coords() * lib.param.BOHR)
@@ -217,7 +229,14 @@ def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_chang
 
         print(f"Step completed. Force change: {force_change:.5e}")
 
+    end_time = time.time()
+
+    print("Optimisation time: ", end_time - start_time)
+
     coords_optimized = mol.atom_coords()
+
+    print("Coords Optimised: ", coords_optimized)
+
     return coords_optimized
 
 
@@ -234,15 +253,60 @@ def calculate_energy(atoms):
     element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
 
     mol = gto.M(                                                                                                        # Define the molecule in PySCF
-        verbose=0,
+        verbose=5,
         atom=atoms,
-        basis='def2-svp',
+        basis='6-31G',
         unit='Angstrom',
         spin=get_spin(element_count)
     )
 
-    mf = dft.RKS(mol)                                                                                                   # Setup system for DFT calculation
+    start_time = time.time()
+
+    mf = dft.RKS(mol).density_fit()
+
+    mf.direct_scf = True
+    mf.diis = True  # Use DIIS for SCF convergence acceleration
+    mf.set(default='dftd3')  # Use the 'dftd3' engine, or another depending on your method
 
     corrected_energy, forces = dftd3(mf, mol)                                                                           # Call the dftd3 function
 
+    end_time = time.time()
+
+    print("Total time taken for energy calculation: ", start_time - end_time)
+
     return corrected_energy, forces
+
+####################################################
+
+# coordinates = ['Li -1.0043096959 1.0043096959 1.0043096959', 'Li -1.0043096959 -1.0043096959 -1.0043096959', 'Li 1.0043096959 -1.0043096959 1.0043096959', 'Li 1.0043096959 1.0043096959 -1.0043096959', 'H -1.0043096959 -1.0043096959 1.0043096959', 'H -1.0043096959 1.0043096959 -1.0043096959', 'H 1.0043096959 1.0043096959 1.0043096959', 'H 1.0043096959 -1.0043096959 -1.0043096959']
+#
+# energy, _ = calculate_energy(coordinates)
+#
+# print("Crystal alone energy: ", energy)
+
+#####################################################
+
+num_atoms = 8
+
+name = 'LiH-Trial'
+combined_xyz = ['Li -1.0043096959 1.0043096959 1.0043096959', 'Li -1.0043096959 -1.0043096959 -1.0043096959', 'Li 1.0043096959 -1.0043096959 1.0043096959', 'Li 1.0043096959 1.0043096959 -1.0043096959', 'H -1.0043096959 -1.0043096959 1.0043096959', 'H -1.0043096959 1.0043096959 -1.0043096959', 'H 1.0043096959 1.0043096959 1.0043096959', 'H 1.0043096959 -1.0043096959 -1.0043096959', 'H -0.5850856992 -1.7543096959 -0.5850856992', 'H -0.0844540981 -1.7543096959 -0.0844540981', 'H 0.0844540981 -2.3793096959 0.0844540981', 'H 0.5850856992 -2.3793096959 0.5850856992', 'H 0.0844540981 -0.0844540981 1.7543096959', 'H 0.5850856992 -0.5850856992 1.7543096959', 'H -0.5850856992 0.5850856992 2.3793096959', 'H -0.0844540981 0.0844540981 2.3793096959', 'H 1.7543096959 -0.5850856992 0.5850856992', 'H 1.7543096959 -0.0844540981 0.0844540981', 'H 2.3793096959 0.0844540981 -0.0844540981', 'H 2.3793096959 0.5850856992 -0.5850856992', 'H -1.7543096959 -0.5850856992 -0.5850856992', 'H -1.7543096959 -0.0844540981 -0.0844540981', 'H -2.3793096959 0.0844540981 0.0844540981', 'H -2.3793096959 0.5850856992 0.5850856992', 'H -0.5850856992 1.7543096959 0.5850856992', 'H -0.0844540981 1.7543096959 0.0844540981', 'H 0.0844540981 2.3793096959 -0.0844540981', 'H 0.5850856992 2.3793096959 -0.5850856992', 'H -0.0844540981 -0.0844540981 -1.7543096959', 'H -0.5850856992 -0.5850856992 -1.7543096959', 'H 0.5850856992 0.5850856992 -2.3793096959', 'H 0.0844540981 0.0844540981 -2.3793096959']
+
+mol, mf_grad_scan, initial_coordinates = setup_compound(combined_xyz)
+raw_optimised_xyz = optimiser(mol, mf_grad_scan, initial_coordinates, num_atoms)
+file = f'Optimised Coordinates/{name}_optimised_coords'
+
+save_optimised_coords(raw_optimised_xyz, file)
+
+######################################################
+
+# optimised_xyz =
+
+# energy_comb, _ = calculate_energy(optimised_xyz)
+# print("Combined optimised energy: ", energy_comb)
+
+#######################################################
+
+# H_opt_xyz =
+
+# energy_H, _ = calculate_energy(H_opt_xyz)
+# print("H optimised energy: ", energy_H)

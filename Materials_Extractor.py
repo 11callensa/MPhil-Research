@@ -29,54 +29,53 @@ def extract_hydrogen(file_path):
     if atoms.count('H') == 2:
         pos1 = positions[0]
         pos2 = positions[1]
-        bond_length = np.linalg.norm(pos1 - pos2)                                                                       # Calculate distance between two H atoms
+        bond_length = np.linalg.norm(pos1 - pos2)                                                                       # Calculate distance between two H atoms.
 
         return bond_length
     else:
-        print("File does not contain exactly two hydrogen atoms.")                                                      # Process only works for H2, not other forms of hydrogen
+        print("File does not contain exactly two hydrogen atoms.")                                                      # Process only works for H2, not other forms of hydrogen.
         return None, None
 
 
 def extract_compound(material_id, name):
     """
-        Takes in the Material Project ID and extracts xyz coordinates of the compound.
+        Takes in the Material Project ID and extracts coordinates and features of the compound.
 
-        :param material_id: Materials Project ID.
+        :param: material_id: Materials Project ID.
+        :param: name: Chemical name of the compound.
         :return: Compound coordinates.
     """
 
-    with MPRester(key) as m:                                                                                            # Access API using key
+    with MPRester(key) as m:                                                                                            # Access API using key.
 
         print("Material ID: ", material_id)
 
-        material_data = m.get_entry_by_material_id(material_id)
+        material_data = m.get_entry_by_material_id(material_id)                                                         # Extract general material data.
 
         try:
             energy_above_hull = m.get_entry_by_material_id(material_id, property_data=['energy_above_hull'])[0].data.get(
-                'energy_above_hull')
+                'energy_above_hull')                                                                                    # Extract energy above hull if m is a list.
         except:
-            detail = m.get_entry_by_material_id(material_id)
+            detail = m.get_entry_by_material_id(material_id)                                                            # If m is not a list, build the compound phase diagram and find energy above hull.
             elements = [str(el) for el in detail.composition.elements]
             details = m.get_entries_in_chemsys(elements)
             phase_diagram = PhaseDiagram(details)
             energy_above_hull = phase_diagram.get_e_above_hull(detail)
 
         try:
-            elasticity_doc = m.materials.elasticity.search(material_ids=[material_id])[0]
+            elasticity_doc = m.materials.elasticity.search(material_ids=[material_id])[0]                               # Extract mechanical properties of the compound.
         except (IndexError, AttributeError, KeyError):
             elasticity_doc = None
 
         print(elasticity_doc)
 
-        # Initialize variables with default values (None) in case input is required
-        bulk_voigt = None
+        bulk_voigt = None                                                                                               # Initialize variables with default values (None) in case input is required
         bulk_reuss = None
         shear_voigt = None
         shear_reuss = None
         poisson_ratio = None
 
-        # If elasticity_doc is None, prompt the user for inputs
-        if elasticity_doc.bulk_modulus is not None:
+        if elasticity_doc.bulk_modulus is not None:                                                                     # If there are mechanical properties, extract shear and bulk moduli and poisson's ratio
             bulk_voigt = elasticity_doc.bulk_modulus.voigt
             bulk_reuss = elasticity_doc.bulk_modulus.reuss
             shear_voigt = elasticity_doc.shear_modulus.voigt
@@ -86,7 +85,7 @@ def extract_compound(material_id, name):
             avg_bulk = (bulk_voigt + bulk_reuss) / 2
             avg_shear = (shear_voigt + shear_reuss) / 2
 
-        else:
+        else:                                                                                                           # If elasticity_doc is None, prompt the user for inputs.
             print("Elasticity document retrieval failed or returned None.")
             print("You can manually input the required values.")
 
@@ -97,30 +96,31 @@ def extract_compound(material_id, name):
         print("Average Shear Modulus: ", avg_shear)
         print("Poisson's Ratio: ", poisson_ratio)
 
-        adsorption_temp = input("Input the compound's adsorption temperature in K: ")
-        desorption_temp = input("Input the compound's desorption temperature in K: ")
+        adsorption_temp = input("Input the compound's adsorption temperature in K (If in TESTING mode input 0): ")      # User inputs adsorption and desorption temperature.
+        desorption_temp = input("Input the compound's desorption temperature in K (If in TESTING mode input 0: ")
 
         print("Adsorption Temperature: ", adsorption_temp)
         print("Desorption Temperature: ", desorption_temp)
 
-        extracted_input_features = [energy_above_hull]
+        extracted_input_features = [energy_above_hull]                                                                  # Store the energy above hull and temperatures.
         extracted_output_features = [adsorption_temp, desorption_temp]
 
-        uncertain_features = [avg_bulk, avg_shear, poisson_ratio]
+        uncertain_features = [avg_bulk, avg_shear, poisson_ratio]                                                       # Store the mechanical features as uncertain features (These may or may not be used in the model training).
 
-        structure = m.get_structure_by_material_id(material_id)
-        supercell_structure = structure * (3, 3, 3)
+        structure = m.get_structure_by_material_id(material_id)                                                         # Extract the regular structure of the compound.
+        supercell_structure = structure * (3, 3, 3)                                                                     # Form the compound supercell.
 
-        sga = SpacegroupAnalyzer(supercell_structure)
-        conventional_structure = sga.get_conventional_standard_structure()
+        sga = SpacegroupAnalyzer(structure)                                                                   # Extract data of the supercell.
+        conventional_structure = sga.get_conventional_standard_structure()                                              # Convert that data into a unit cell.
+        structure_prim = sga.get_primitive_standard_structure()
 
-        cif_writer = CifWriter(conventional_structure)
+        cif_writer = CifWriter(structure_prim)                                                                  # Save this unit cell in a .cif file.
         cif_writer.write_file(f"CIF Files/{name}_supercell.cif")
 
         print(f"CIF file saved as '{name}_supercell.cif'.")
 
         task = True
-        while task:
+        while task:                                                                                                     # Need to use VESTA as cannot extract the data from the variable conventional_structure.
             choice = input(
                 "Pause - 1) Open saved CIF file in Vesta. \n"
                 "2) Click Export Data and select VASP format - name the file in the format {chemical_name}_supercell.vasp.\n"
@@ -128,42 +128,39 @@ def extract_compound(material_id, name):
                 "4) From the drop down menu select 'Output coordinates of all displayed atoms', click ok.\n"
                 "5) Return to the python program and type 'y' to continue: \n")
 
-            if choice.lower() == 'y':  # Check for lowercase 'y'
-                task = False  # Exit the loop
+            if choice.lower() == 'y':                                                                                   # Once completed, mark the task as done.
+                task = False
             else:
                 print("Please complete the task and type 'y' to continue.")
 
-    with open(f"POSCAR Files/{name}_supercell.vasp", "r") as file:
+    with open(f"POSCAR Files/{name}_supercell.vasp", "r") as file:                                                      # Extract the ocntents of the .vasp file.
         lines = file.readlines()
 
-    # Extract atom types and their counts
-    atom_types = lines[5].split()  # Line containing atom types (e.g., Si O)
-    atom_counts = list(map(int, lines[6].split()))  # Line containing counts (e.g., 6 18)
+    atom_types = lines[5].split()                                                                                       # Extract atom types and their counts.
+    atom_counts = list(map(int, lines[6].split()))
 
-    # Create the atoms list
-    atoms = [atom for atom, count in zip(atom_types, atom_counts) for _ in range(count)]
+    atoms = [atom for atom, count in zip(atom_types, atom_counts) for _ in range(count)]                                # Create the atoms list.
 
-    coordinate_lines = lines[8:]  # Start reading coordinates from the 9th line
+    coordinate_lines = lines[8:]                                                                                        # Start reading coordinates from the 9th line.
     positions = []
 
     for line in coordinate_lines:
         positions.append(list(map(float, line.split())))
 
-    # Store information in the desired format
     xyz_format = []
     unique_atoms = set()
 
-    for symbol, pos in zip(atoms, positions):
+    for symbol, pos in zip(atoms, positions):                                                                           # Store information in the desired format.
         xyz_format.append(f"{symbol} {pos[0]:.10f} {pos[1]:.10f} {pos[2]:.10f}")
         unique_atoms.add(symbol)
 
-    oxidation_states = material_data[0].data.get('oxidation_states')
+    oxidation_states = material_data[0].data.get('oxidation_states')                                                    # Extract oxidation states for all atoms in the compound.
 
-    if oxidation_states is None:
-        oxidation_states = {}  # Create an empty dictionary to store oxidation states
+    if oxidation_states is None:                                                                                        # If oxidation information is not available, have the user input the states.
+        oxidation_states = {}                                                                                           # Create an empty dictionary to store oxidation states.
         for symbol in unique_atoms:
             state = float(input(f"Input the oxidation state of atom {symbol} within this compound: "))
-            oxidation_states[symbol] = state  # Store in the dictionary
+            oxidation_states[symbol] = state                                                                            # Store states in the dictionary
 
     print("Oxidation states: ", oxidation_states)
     print("Extracted input features: ", extracted_input_features)
@@ -173,6 +170,11 @@ def extract_compound(material_id, name):
 
 
 def manual_input():
+    """
+        A function in case the user must input bulk and shear modulus and poisson's ratio.
+
+        :return: Bulk modulus, shear modulus and poisson's ratio.
+    """
 
     while True:
         try:
@@ -199,12 +201,18 @@ def manual_input():
 
 
 def compute_bonds(positions):
+    """
+        Computes the bonds between atoms based on maximum and minimum cutoff distances.
+        These distances are manually input by the user who finds them by opening the compound in VESTA.
 
-    pairs_with_cutoffs = {}
+        :param positions: Coordinates of all atoms in the compound.
+        :return: The list of pairs of atom indices that are bonded.
+    """
 
-    # Initial user task
+    pairs_with_cutoffs = {}                                                                                             # Set a dictionary to store atom pairs and their max. and min. cutoffs.
+
     task = True
-    while task:
+    while task:                                                                                                         # Have the user run VESTA and find the bond cutoff distances.
         choice = input(
             "Pause - 1) In Vesta, click Edit - Bonds. \n"
             "2) Look at the bonds that exist in the list - add any new bond pairs and cutoff distances and"
@@ -212,34 +220,28 @@ def compute_bonds(positions):
             "3) Note the bond pairs (e.g., Ti-O) and associated cutoff distances.\n"
             "4) Return to the python program and type 'y' to continue: \n"
         )
-        if choice.lower() == 'y':  # Check for lowercase 'y'
-            task = False  # Exit the loop
+        if choice.lower() == 'y':                                                                                       # If the task is complete exit the loop.
+            task = False
         else:
             print("Please complete the task and type 'y' to continue.")
 
-    # Keep asking for pairs and cutoff distances
-    while True:
-        # Ask for the element pair and cutoff distances
+    while True:                                                                                                         # For every identified pair of atoms in the compound, ask for bond cutoff distances.
         pair = input("Enter a pair of elements to form bonds between (e.g., 'Ti-O') or 'done' to stop: ").strip()
 
-        # Exit condition if the user types 'done'
-        if pair.lower() == 'done':
+        if pair.lower() == 'done':                                                                                      # Exit loop if the user types 'done'
             break
 
-        # Validate the pair format (you can add more validation if needed)
-        if '-' not in pair:
+        if '-' not in pair:                                                                                             # Validate the pair format.
             print("Invalid format. Please enter a pair in the format 'Element1-Element2'.")
             continue
 
-        # Ask for the maximum cutoff distance
-        try:
+        try:                                                                                                            # Ask for the maximum cutoff distance.
             cutoff = float(input(f"Enter the maximum cutoff distance for the pair {pair}: "))
         except ValueError:
             print("Invalid cutoff distance. Please enter a valid number.")
             continue
 
-        # Ask for the minimum cutoff distance with a default value of 0
-        try:
+        try:                                                                                                            # Ask for the minimum cutoff distance with a default value of 0.
             min_cutoff = input(f"Enter the minimum cutoff distance for the pair {pair} (default is 0): ").strip()
             if min_cutoff == '':
                 min_cutoff = 0.0
@@ -249,12 +251,10 @@ def compute_bonds(positions):
             print("Invalid minimum cutoff distance. Setting to default value of 0.")
             min_cutoff = 0.0
 
-        # Save the pair and cutoff distances to the dictionary
-        pairs_with_cutoffs[pair] = (min_cutoff, cutoff)
+        pairs_with_cutoffs[pair] = (min_cutoff, cutoff)                                                                 # Save the pair and cutoff distances to the dictionary.
         print(f"Added {pair} with minimum cutoff {min_cutoff} and maximum cutoff {cutoff}.")
 
-    # Print the resulting pairs and their cutoffs
-    print("\nThe following pairs and their cutoff distances were added:")
+    print("\nThe following pairs and their cutoff distances were added:")                                               # Print the resulting pairs and their cutoffs
     for pair, (min_cutoff, cutoff) in pairs_with_cutoffs.items():
         print(f"{pair}: min_cutoff = {min_cutoff}, max_cutoff = {cutoff}")
 

@@ -103,7 +103,7 @@ def centre_coords(base_matrix, num_center):
     return centered_atom_list, center
 
 
-def place_hydrogen(matrix, surfaces, bond_length, offset1=6, offset2=3):
+def place_hydrogen(matrix, surfaces, bond_length, offset1=6, offset2=5):
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection='3d')
 

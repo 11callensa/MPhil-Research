@@ -76,6 +76,13 @@ def preprocess_node_features(node_features):
     return node_features[:, 0:6]  # Extract columns 3, 4, and 5
 
 
+class Normaliser():
+    def __init__(self):
+
+        self.input='hello'
+
+
+
 class FCNN_FeatureCombiner(nn.Module):
     def __init__(self, input_dim, hidden_size, output_dim):
         super(FCNN_FeatureCombiner, self).__init__()
