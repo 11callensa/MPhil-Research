@@ -164,7 +164,7 @@ elif run_choice == '2':
     if model_choice == '1':
         Diffusion_Model.run_training()
     elif model_choice == '2':
-        Energy_Model.run_training()
+        Energy_Model.data_preprocess()
     elif model_choice == '3':
         Temperature_Model.run_training()
     #

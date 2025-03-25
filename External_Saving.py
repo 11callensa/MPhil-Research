@@ -4,7 +4,13 @@ import os
 
 
 def save_edges_to_csv(edges, name):
-    """ Save the updated edge list to the CSV file. """
+    """
+        Saves the updated edge list to the CSV file.
+
+        :param edges: Edge indices.
+        :param name: Name of the compound.
+    """
+
     CSV_FILE = f"Edge Indices/edge_indices_{name}.csv"  # CSV file storing connections
     with open(CSV_FILE, "w", newline="") as f:
         writer = csv.writer(f)
@@ -25,10 +31,10 @@ def load_existing_edges(name):
 
 def save_optimised_coords(coords, filename):
     """
-    Save a list of 3D coordinates to a CSV file.
+        Save a list of 3D coordinates to a CSV file.
 
-    :param coords: List of lists or NumPy array of shape (N, 3), where N is the number of points.
-    :param filename: Name of the CSV file to save the coordinates.
+        :param coords: List of lists or NumPy array of shape (N, 3), where N is the number of points.
+        :param filename: Name of the CSV file to save the coordinates.
     """
     np.savetxt(filename, coords, delimiter=",", fmt="%.8f")
 

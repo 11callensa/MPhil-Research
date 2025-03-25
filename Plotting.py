@@ -5,36 +5,37 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 
 def plot_crystal(positions, edge_indices):
-    # Parse positions into atom coordinates
-    atom_coordinates = []
+    """
+        Plots a system of atoms and bonds in 3D space.
+
+        :param positions: 3D coordinates of the system.
+        :param edge_indices: Bonds between pairs of atoms.
+    """
+
+    atom_coordinates = []                                                                                               # Parse positions into atom coordinates
+
     for position in positions:
-        parts = position.split()  # Split each line into element and coordinates
-        atom_coordinates.append(np.array([float(parts[1]), float(parts[2]), float(parts[3])]))  # 3D coordinates
+        parts = position.split()                                                                                        # Split each line into element and coordinates
+        atom_coordinates.append(np.array([float(parts[1]), float(parts[2]), float(parts[3])]))
 
-    # Convert atom_coordinates to a numpy array for easier manipulation
-    atom_coordinates = np.array(atom_coordinates)
+    atom_coordinates = np.array(atom_coordinates)                                                                       # Convert atom_coordinates to a numpy array for easier manipulation.
 
-    # Set up the plot
-    fig = plt.figure()
+    fig = plt.figure()                                                                                                  # Set up the plot.
     ax = fig.add_subplot(111, projection='3d')
 
-    # Plot atoms as scatter points (different colors for clarity)
-    ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c='b', marker='o', label='Atoms')
+    ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c='b', marker='o', label='Atoms')# Plot atoms as scatter points (different colors for clarity).
 
-    # Plot bonds as lines between the atoms defined by edge_indices
-    for bond in edge_indices:
+    for bond in edge_indices:                                                                                           # Plot bonds as lines between the atoms defined by edge_indices.
         i, j = bond
         ax.plot([atom_coordinates[i, 0], atom_coordinates[j, 0]],
                 [atom_coordinates[i, 1], atom_coordinates[j, 1]],
                 [atom_coordinates[i, 2], atom_coordinates[j, 2]], c='r', linestyle='-', linewidth=1)
 
-    # Labels and title
-    ax.set_xlabel('X')
+    ax.set_xlabel('X')                                                                                                  # Labels and title.
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
     ax.set_title('3D Plot of Atoms and Bonds')
 
-    # Show plot
     plt.show()
 
 

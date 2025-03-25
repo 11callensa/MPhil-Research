@@ -110,11 +110,10 @@ def extract_compound(material_id, name):
         structure = m.get_structure_by_material_id(material_id)                                                         # Extract the regular structure of the compound.
         supercell_structure = structure * (3, 3, 3)                                                                     # Form the compound supercell.
 
-        sga = SpacegroupAnalyzer(structure)                                                                   # Extract data of the supercell.
+        sga = SpacegroupAnalyzer(supercell_structure)                                                                   # Extract data of the supercell.
         conventional_structure = sga.get_conventional_standard_structure()                                              # Convert that data into a unit cell.
-        structure_prim = sga.get_primitive_standard_structure()
 
-        cif_writer = CifWriter(structure_prim)                                                                  # Save this unit cell in a .cif file.
+        cif_writer = CifWriter(conventional_structure)                                                                  # Save this unit cell in a .cif file.
         cif_writer.write_file(f"CIF Files/{name}_supercell.cif")
 
         print(f"CIF file saved as '{name}_supercell.cif'.")
@@ -254,44 +253,35 @@ def compute_bonds(positions):
         pairs_with_cutoffs[pair] = (min_cutoff, cutoff)                                                                 # Save the pair and cutoff distances to the dictionary.
         print(f"Added {pair} with minimum cutoff {min_cutoff} and maximum cutoff {cutoff}.")
 
-    print("\nThe following pairs and their cutoff distances were added:")                                               # Print the resulting pairs and their cutoffs
+    print("\nThe following pairs and their cutoff distances were added:")                                               # Print the resulting pairs and their cutoffs.
     for pair, (min_cutoff, cutoff) in pairs_with_cutoffs.items():
         print(f"{pair}: min_cutoff = {min_cutoff}, max_cutoff = {cutoff}")
 
-    # Parse positions into separate atom types and coordinates
-    atom_symbols = []
+    atom_symbols = []                                                                                                   # Parse positions into separate atom types and coordinates.
     atom_coordinates = []
     for position in positions:
 
-        parts = position.split()  # Split each line into element and coordinates
-        atom_symbols.append(parts[0])  # Atom type (Ti, O, etc.)
-        atom_coordinates.append(np.array([float(parts[1]), float(parts[2]), float(parts[3])]))  # 3D coordinates
+        parts = position.split()                                                                                        # Split each line into element and coordinates.
+        atom_symbols.append(parts[0])                                                                                   # Atom type (Ti, O, etc.).
+        atom_coordinates.append(np.array([float(parts[1]), float(parts[2]), float(parts[3])]))
 
-    # Convert the list of atom coordinates to a numpy array for vectorized operations
-    atom_coordinates = np.array(atom_coordinates)
+    atom_coordinates = np.array(atom_coordinates)                                                                       # Convert the list of atom coordinates to a numpy array for vectorized operations.
 
-    edge_indices = []  # List to hold the bonds (edges)
+    edge_indices = []                                                                                                   # List to hold the bonds (edges).
 
-    # Compute the distance between all pairs of atoms
     num_atoms = len(atom_coordinates)
 
-    for i in range(num_atoms):
-        for j in range(i + 1, num_atoms):  # Only check each pair once (since bonding is symmetric)
-            # Get the element types of the two atoms
-            element_pair = f"{atom_symbols[i]}-{atom_symbols[j]}"
+    for i in range(num_atoms):                                                                                          # Compute the distance between all pairs of atoms.
+        for j in range(i + 1, num_atoms):                                                                               # Only check each pair once (since bonding is symmetric).
+            element_pair = f"{atom_symbols[i]}-{atom_symbols[j]}"                                                       # Get the element types of the two atoms.
 
-            # Check if the current pair is in the list of valid pairs
-            if element_pair in pairs_with_cutoffs:
-                # Get the cutoff distances for this pair
-                min_cutoff, max_cutoff = pairs_with_cutoffs[element_pair]
+            if element_pair in pairs_with_cutoffs:                                                                      # Check if the current pair is in the list of valid pairs.
+                min_cutoff, max_cutoff = pairs_with_cutoffs[element_pair]                                               # Get the cutoff distances for this pair.
 
-                # Calculate the Euclidean distance between atoms i and j
-                distance = np.linalg.norm(atom_coordinates[i] - atom_coordinates[j])
+                distance = np.linalg.norm(atom_coordinates[i] - atom_coordinates[j])                                    # Calculate the Euclidean distance between atoms i and j.
 
-                # Check if the distance is within the specified range
-                if min_cutoff <= distance <= max_cutoff:
-                    # Append the bond pair (in both directions)
-                    edge_indices.append([i, j])
+                if min_cutoff <= distance <= max_cutoff:                                                                # Check if the distance is within the specified range.
+                    edge_indices.append([i, j])                                                                         # Append the bond pair (in both directions).
 
     return edge_indices
 

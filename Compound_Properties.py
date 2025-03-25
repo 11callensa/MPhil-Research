@@ -63,62 +63,65 @@ def get_spin(element_list):
 
 
 def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, flag):
+    """
+        Extracts features of all atoms (nodes) and bonds (edges) in the system.
+
+        :param centered_xyz: Centered 3D coordinates.
+        :param edge_indices: Bonded pairs in the system.
+        :param oxidation_states: Oxidation states of atoms in the compound.
+        :param num_fixed: Number of atoms in the compound.
+        :param flag: Sets the mode - Crystal alone, combined crystal + hydrogen or hydrogen alone.
+        :return: All node and edge features of the system.
+    """
+
     node_features = []
     coordinates = []
 
-    # Define fixed atoms
-    fixed_atoms = set(centered_xyz[:num_fixed])
+    fixed_atoms = set(centered_xyz[:num_fixed])                                                                         # Define fixed atoms from the compound.
 
-    # Bond strength dictionary
-    bond_strengths = {}
+    bond_strengths = {}                                                                                                 # Bond strength dictionary.
 
-    # Extract node features
     for index, current_node in enumerate(centered_xyz):
         node_list = []
         parts = current_node.split()
 
-        # Extract element and coordinates
-        symbol = parts[0]
+        symbol = parts[0]                                                                                               # Extract element.
         x_coord = float(parts[1])
         y_coord = float(parts[2])
         z_coord = float(parts[3])
 
-        coordinates.append([x_coord, y_coord, z_coord])  # Store coordinates
+        coordinates.append([x_coord, y_coord, z_coord])                                                                 # Store coordinates as node features.
 
-        # Get proton, neutron, and electron counts
-        mass_number, protons, neutrons, electrons = atom_config(current_node)
+        mass_number, protons, neutrons, electrons = atom_config(current_node)                                           # Using the atoms type, find the mass, proton count, neutron count and electron count of each atom.
 
-        if flag == 0:
+        if flag == 0:                                                                                                   # For a combined compound-hydrogen system, any hydrogen atom not in the compound has 1 electron.
             if index >= num_fixed:
                 electrons = 1
-            else:
+            else:                                                                                                       # If we are looping through the atoms in the compound, edit the elctron count using the oxidation states.
                 if symbol in oxidation_states:
                     electrons -= int(oxidation_states[symbol])  # Adjust electron count for oxidation state
 
-        if flag == 1:
+        if flag == 1:                                                                                                   # For a hydrogen alone system, each hydrogen atom has 1 electron.
             electrons = 1
 
-        # Add basic features
-        node_list.extend([x_coord, y_coord, z_coord])
+        node_list.extend([x_coord, y_coord, z_coord])                                                                   # Collect all features of the node and add to a list.
         node_list.extend([mass_number, protons, neutrons, electrons])
 
-        node_features.append(node_list)
+        node_features.append(node_list)                                                                                 # Add the list of features to the overall system node features list.
 
     edge_features = []
-    for edge in edge_indices:
+    for edge in edge_indices:                                                                                           # Loop through each bonded pair.
 
         atom1_index, atom2_index = edge
-        atom1 = centered_xyz[atom1_index].split()[0]
+        atom1 = centered_xyz[atom1_index].split()[0]                                                                    # Extract 3D coordinates of each bonded atom.
         atom2 = centered_xyz[atom2_index].split()[0]
 
-        if flag == 0:
+        if flag == 0:                                                                                                   # If this is a compounds only or compound-hydrogen system.
 
-            # Determine if bond is within or outside the compound
-            within_compound = centered_xyz[atom1_index] in fixed_atoms and centered_xyz[atom2_index] in fixed_atoms
+            within_compound = centered_xyz[atom1_index] in fixed_atoms and centered_xyz[atom2_index] in fixed_atoms     # Determine if bond is within or outside the compound
             bond_key = (atom1, atom2, "within") if within_compound else (atom1, atom2, "outside")
 
-            # Ask for user input only if this bond type hasn't been entered before
-            if bond_key not in bond_strengths and (atom2, atom1, bond_key[2]) not in bond_strengths:
+            if bond_key not in bond_strengths and (atom2, atom1, bond_key[2]) not in bond_strengths:                    # Ask for user input only if this bond type hasn't been entered before.
                 while True:
                     try:
                         bond_context = "WITHIN THE COMPOUND" if within_compound else "OUTSIDE THE COMPOUND"
@@ -134,16 +137,12 @@ def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, 
                     except ValueError as e:
                         print(e)
 
-            # Retrieve bond strength
-            bond_strength = bond_strengths.get(bond_key, bond_strengths.get((atom2, atom1, bond_key[2]), 0))
+            bond_strength = bond_strengths.get(bond_key, bond_strengths.get((atom2, atom1, bond_key[2]), 0))            # Retrieve bond strength
 
-        else:
-
-            # Check if bond strength for this pair has already been recorded, if not, prompt for input
-            if (atom1, atom2) not in bond_strengths and (atom2, atom1) not in bond_strengths:
+        else:                                                                                                           # For a hydrogen alone system.
+            if (atom1, atom2) not in bond_strengths and (atom2, atom1) not in bond_strengths:                           # Check if bond strength for this pair has already been recorded, if not, prompt for input.
                 print(f"For the bond between {atom1} and {atom2} -")
-                # Allow user to manually assign the bond strength based on the atom pair
-                while True:
+                while True:                                                                                             # Allow user to manually assign the bond strength based on the atom pair.
                     try:
                         bond_strength = float(input(
                             f"Enter bond strength for {atom1}-{atom2} (Covalent=1, Ionic=0.75, Metallic=0.5, Alloy=0.25, None=0): "))
@@ -157,37 +156,28 @@ def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, 
 
         distance = edge_lengths(edge, coordinates)
 
-        # Append edge features
-        edge_features.append([distance, bond_strength])
+        edge_features.append([distance, bond_strength])                                                                 # Append edge features.
 
     return node_features, edge_features
 
 
 def atom_config(node_coords):
     """
-        Extracts proton, neutron, and electron counts based on the element in the input string.
+        Finds the mass, proton no. neutron no. and electron no. of an atom.
 
-        Args:
-            input_str (str): A string in the format 'Element x y z', where
-                             Element is the chemical symbol (e.g., 'Li'),
-                             and x, y, z are coordinates (ignored in calculations).
+        :param node_coords: Information on the atoms type and its position in 3D space.
+        :return: Mass, proton no. neutron no. and electron no. of an atom.
+    """
 
-        Returns:
-            dict: A dictionary containing proton, neutron, and electron counts.
-        """
-    # Parse the input string
     parts = node_coords.split()
-    symbol = parts[0]  # Extract element symbol (e.g., 'Li')
+    symbol = parts[0]                                                                                                   # Extract element symbol (e.g., 'Li').
 
-    # Get the element's data from the periodic table
-    el = element(symbol)
+    el = element(symbol)                                                                                                # Get the element's data from the periodic table.
 
-    # Extract proton and neutron counts
-    protons = el.atomic_number
-    neutrons = round(el.atomic_weight) - el.atomic_number  # Using most common isotope approximation
+    protons = el.atomic_number                                                                                          # Extract proton and neutron counts.
+    neutrons = round(el.atomic_weight) - el.atomic_number                                                               # Using most common isotope approximation.
 
-    # Assume a neutral atom, so electrons = protons
-    electrons = protons
+    electrons = protons                                                                                                 # Assume a neutral atom, so electrons = protons.
 
     mass_number = protons + neutrons
 
@@ -195,13 +185,19 @@ def atom_config(node_coords):
 
 
 def edge_lengths(edge, coordinates):
+    """
+        Calculates the distance in 3D space between two bonded atoms.
+
+        :param edge: Bonded pair of atoms.
+        :param coordinates: Coordinates of the bonded atoms.
+        :return: Euclidean distance.
+    """
 
     node1, node2 = edge
     coord1 = coordinates[node1]
     coord2 = coordinates[node2]
 
-    # Calculate Euclidean distance
-    distance = ((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2 + (coord1[2] - coord2[2]) ** 2) ** 0.5
+    distance = ((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2 + (coord1[2] - coord2[2]) ** 2) ** 0.5      # Calculate Euclidean distance
 
     return distance
 
@@ -217,43 +213,36 @@ def calculate_bond_angle(coord_a, coord_center, coord_b):
 
 def mass_and_charge(compound_reo_xyz, oxidation_states, num_atoms, flag):
     """
-    Calculate the total mass and charge of a compound considering oxidation states.
+        Calcualtes the total mass and charge of the system.
 
-    Parameters:
-        compound_reo_xyz (list of str): A list where each entry contains atomic information in the format:
-                                        'Element x y z'.
-        oxidation_states (dict): A dictionary where keys are element symbols and values are their oxidation states.
-
-    Returns:
-        tuple: (total_mass, total_charge), where:
-               - total_mass (float) is the sum of the atomic masses.
-               - total_charge (float) is the sum of the charges based on oxidation states.
+        :param compound_reo_xyz: 3D coordinates of the system.
+        :param oxidation_states: Oxidation states of atoms in the compound.
+        :param num_atoms: NUmber of atoms in the compound.
+        :param flag: Sets the mode - compound alone, compound-hydrogen and hydrogen aloen.
+        :return: Total mass and total mass of the charge.
     """
+
     total_mass = 0
     total_charge = 0
 
     for index, atom_info in enumerate(compound_reo_xyz):
-        # Extract element symbol (first part of the string)
-        element_symbol = atom_info.split()[0]
+        element_symbol = atom_info.split()[0]                                                                           # Extract element symbol (first part of the string).
 
-        # Use mendeleev to fetch atomic properties
-        el = element(element_symbol)
+        el = element(element_symbol)                                                                                    # Use mendeleev to fetch atomic properties.
 
-        # Accumulate mass
-        total_mass += el.atomic_weight
+        total_mass += el.atomic_weight                                                                                  # Accumulate mass.
 
-        if flag == 0:
-            if index >= num_atoms:
+        if flag == 0:                                                                                                   # For compound alone and compound-hydrogen systems.
+            if index >= num_atoms:                                                                                      # If the current atom is not in the compound, add 1 to the total charge.
                 total_charge += 1
                 print("Calculating charge on placed H atoms")
 
-            else:
-                # Calculate charge using the oxidation state if provided
+            else:                                                                                                       # If the current atom is in the compound.
                 oxidation_state = oxidation_states.get(element_symbol, 0)
-                total_charge += oxidation_state
+                total_charge += oxidation_state                                                                         # Calculate charge using the oxidation state.
 
-        if flag == 1:
-            total_charge += 1
+        if flag == 1:                                                                                                   # For hydrogen alone system.
+            total_charge += 1                                                                                           # Add one to the total charge for every atom.
 
     return total_mass, total_charge
 

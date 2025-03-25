@@ -8,42 +8,47 @@ key = os.getenv("MATERIALS_KEY")
 
 
 def set_train_materials():
+    """
+        Sets the adsorbent and adsorber.
+
+        :return: Hydrogen and the compound to be adsorbed to.
+    """
 
     hydrogen = 'H2'
 
-    compound_test = {'LiH': 'mp-23703'}
+    compound_test = {'LiH-Trial': 'mp-23703'}
 
-    compound = {'TiO2-A': 'mp-390',
-                'TiO2-R': 'mp-1041565',
-                'Pt': 'mp-126',
-                'Ni': 'mp-23',
-                'Pd': 'mp-2',
-                'MgO': 'mp-1265',
-                'Al2O3': 'mp-1143',
-                'LaCrO3': 'mp-19281',
-                'GaN': 'mp-804',
-                'WC': 'mp-1894',
-                'TiC': 'mp-631',
-                'CoO': 'mp-22408',
-                'ZnO': 'mp-2133',
-                'ZrO2': 'mp-2858',
-                'Y2O3': 'mp-2652',
-                'Cr2O3': 'mp-19399',
-                'W': 'mp-91',
-                'CuCrO4': 'mp-504927',
-                'Au': 'mp-81',
-                'Cu': 'mp-30',
-                'Ag': 'mp-8566',
-                'SiC': 'mp-1204356',
-                'Ru': 'mp-33',
-                'Ir': 'mp-101',
-                'Rh': 'mp-74',
-                'Al': 'mp-134',
-                'Ta': 'mp-569794',
-                'Co': 'mp-102',
-                'Nb': 'mp-75',
-                'GaAs': 'mp-2354',
-                'Re': 'mp-1186901'}
+    # compound = {'TiO2-A': 'mp-390'}
+                # 'TiO2-R': 'mp-1041565',
+                # 'Pt': 'mp-126',
+                # 'Ni': 'mp-23',
+                # 'Pd': 'mp-2',
+                # 'MgO': 'mp-1265',
+                # 'Al2O3': 'mp-1143',
+                # 'LaCrO3': 'mp-19281',
+                # 'GaN': 'mp-804',
+                # 'WC': 'mp-1894',
+                # 'TiC': 'mp-631',
+                # 'CoO': 'mp-22408',
+                # 'ZnO': 'mp-2133',
+                # 'ZrO2': 'mp-2858',
+                # 'Y2O3': 'mp-2652',
+                # 'Cr2O3': 'mp-19399',
+                # 'W': 'mp-91',
+                # 'CuCrO4': 'mp-504927',
+                # 'Au': 'mp-81',
+                # 'Cu': 'mp-30',
+                # 'Ag': 'mp-8566',
+                # 'SiC': 'mp-1204356',
+                # 'Ru': 'mp-33',
+                # 'Ir': 'mp-101',
+                # 'Rh': 'mp-74',
+                # 'Al': 'mp-134',
+                # 'Ta': 'mp-569794',
+                # 'Co': 'mp-102',
+                # 'Nb': 'mp-75',
+                # 'GaAs': 'mp-2354',
+                # 'Re': 'mp-1186901'}
 
     return hydrogen, compound_test
 

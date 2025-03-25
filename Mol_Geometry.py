@@ -7,11 +7,12 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 
 def surface_finder(matrix):
     """
-    Finds all external planes of the compound.
+        Finds all external planes of the compound.
 
-    :param matrix: The 3D coordinates of the compound.
-    :return: A list of 3D coordinates defining each external plane.
+        :param matrix: The 3D coordinates of the compound.
+        :return: A list of 3D coordinates defining each external plane.
     """
+
     elements = []
     coordinates = []
 
@@ -67,36 +68,28 @@ def compute_volume(matrix):
 
 
 def centre_coords(base_matrix, num_center):
-
     """
-    Centers a crystal's atoms around (0, 0, 0).
+        Centres the system of atoms according to the center of the compound.
 
-    Parameters:
-        base_matrix (list of str): Each element is a string representing an atom
-                                with its element type and 3D coordinates.
-
-    Returns:
-        list of str: A list of strings representing the centered atoms.
+        :param base_matrix: Original 3D coordinates of all atoms in the system.
+        :param num_center: The first num_center atoms from which to find the centroid.
+        :return: Centered 3D coordinates of all atoms in the system.
     """
-    # Extract coordinates from input
-    coordinates = []
+
+    coordinates = []                                                                                                    # Extract coordinates from input
     atom_labels = []
     for atom in base_matrix:
         parts = atom.split()
         atom_labels.append(parts[0])
         coordinates.append([float(x) for x in parts[1:]])
 
-    # Convert to a NumPy array
     coordinates = np.array(coordinates)
 
-    # Compute the geometric center (mean position)
-    center = np.mean(coordinates[:num_center], axis=0)
+    center = np.mean(coordinates[:num_center], axis=0)                                                                  # Compute the geometric center (mean position).
 
-    # Subtract the center from each coordinate to center the crystal
-    centered_coordinates = coordinates - center
+    centered_coordinates = coordinates - center                                                                         # Subtract the center from each coordinate to center the crystal.
 
-    # Format the centered atoms back into strings
-    centered_atom_list = []
+    centered_atom_list = []                                                                                             # Format the centered atoms back into strings.
     for i, coords in enumerate(centered_coordinates):
         centered_atom_list.append(f"{atom_labels[i]} {' '.join(f'{x:.10f}' for x in coords)}")
 

@@ -13,40 +13,43 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     hydrogen_bond = extract_hydrogen(f"{hydrogen}.poscar")                                                              # Extract hydrogen and compound bond lengths and coordinates.
     print("Hydrogen Bond: ", hydrogen_bond)
 
-    compound_xyz, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features = extract_compound(compound_ID, name)
+    compound_xyz, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features = (
+        extract_compound(compound_ID, name))                                                                            # Extract coordinates, oxidation states, mechanical features, temperatures and features that could be used.
 
-    compound_xyz = ['Li 0.0000000000 0.0000000000 0.0000000000', 'Li 0.0000000000 -2.0086193919 -2.0086193919',
-                    'Li 2.0086193919 -2.0086193919 0.0000000000', 'Li 2.0086193919 0.0000000000 -2.0086193919',
-                    'H 0.0000000000 -2.0086193919 0.0000000000', 'H 0.0000000000 0.0000000000 -2.0086193919',
-                    'H 2.0086193919 0.0000000000 0.0000000000', 'H 2.0086193919 -2.0086193919 -2.0086193919']
+    # compound_xyz = ['Li 0.0000000000 0.0000000000 0.0000000000', 'Li 0.0000000000 -2.0086193919 -2.0086193919',
+    #                 'Li 2.0086193919 -2.0086193919 0.0000000000', 'Li 2.0086193919 0.0000000000 -2.0086193919',
+    #                 'H 0.0000000000 -2.0086193919 0.0000000000', 'H 0.0000000000 0.0000000000 -2.0086193919',
+    #                 'H 2.0086193919 0.0000000000 0.0000000000', 'H 2.0086193919 -2.0086193919 -2.0086193919']
 
     print("Uncertain TEST features: ", uncertain_features)
 
     ################## Crystal initial alone code ##################
 
-    edge_indices_crystal = compute_bonds(compound_xyz)
+    edge_indices_crystal = compute_bonds(compound_xyz)                                                                  # Computer the crystal edge indices.
 
     save = input("Save crystal edge indices to csv file? y/n: ")
 
     if save == 'y':
-        save_edges_to_csv(edge_indices_crystal, name)
+        save_edges_to_csv(edge_indices_crystal, name)                                                                   # Save the crystal edge indices.
     else:
         print("Crystal edge indices not saved")
 
     print("Compound XYZ: ", compound_xyz)
     print("Edge Indices of the initial crystal alone: ", edge_indices_crystal)
 
-    plot_crystal(compound_xyz, edge_indices_crystal)
+    plot_crystal(compound_xyz, edge_indices_crystal)                                                                    # Plot the crystal and its bonds alone.
 
-    num_atoms = len(compound_xyz)
+    num_atoms = len(compound_xyz)                                                                                       # Find the number of atoms in the crystal.
     print(f"The first {num_atoms} atoms are fixed.")
 
-    centered_xyz, center = centre_coords(compound_xyz, num_atoms)
+    centered_xyz, center = centre_coords(compound_xyz, num_atoms)                                                       # Centre all atoms around the crystal's centroid.
     print("Crystal center: ", center)
     print("Centered xyz: ", centered_xyz)
 
-    node_features_crystal, edge_features_crystal = node_edge_features(centered_xyz, edge_indices_crystal, oxidation_states, num_atoms, 0)
-    tot_mass_crystal, tot_charge_crystal = mass_and_charge(centered_xyz, oxidation_states, num_atoms, 0)
+    node_features_crystal, edge_features_crystal =\
+        node_edge_features(centered_xyz, edge_indices_crystal, oxidation_states, num_atoms, 0)
+
+    tot_mass_crystal, tot_charge_crystal = mass_and_charge(centered_xyz, oxidation_states, num_atoms, 0)           # Extract the total mass and charge of the crystal.
 
     print("Total mass of the crystal alone: ", tot_mass_crystal)
     print("Total charge of the crystal alone: ", tot_charge_crystal)

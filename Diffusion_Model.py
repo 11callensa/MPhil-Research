@@ -82,7 +82,6 @@ class Normaliser():
         self.input='hello'
 
 
-
 class FCNN_FeatureCombiner(nn.Module):
     def __init__(self, input_dim, hidden_size, output_dim):
         super(FCNN_FeatureCombiner, self).__init__()
