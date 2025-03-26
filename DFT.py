@@ -33,9 +33,9 @@ def dftd3(mf, mol):
         Takes a setup molecule system and calculates total energy whilst taking into account
         attractive and repulsive forces.
 
-        :param mf: DFT setup molecule system.
+        :param mf: Mean-field object.
         :param mol: Molecule system.
-        :return: Energy with forces taken into account.
+        :return: System energy and forces.
     """
 
     coords = mol.atom_coords()
@@ -51,7 +51,6 @@ def dftd3(mf, mol):
     edisp = np.zeros(1)
     grad = np.zeros((mol.natm, 3))
 
-    # Call the libdftd3 wrapper
     libdftd3.wrapper(
         ctypes.c_int(mol.natm),
         coords.ctypes.data_as(ctypes.c_void_p),
@@ -61,17 +60,24 @@ def dftd3(mf, mol):
         ctypes.c_int(tz),
         edisp.ctypes.data_as(ctypes.c_void_p),
         grad.ctypes.data_as(ctypes.c_void_p),
-    )
+    )                                                                                                                   # Call the libdftd3 wrapper.
 
-    # Add dispersion correction to the SCF energy
-    energy_with_dispersion = (mf.kernel() + edisp[0]) * 27.2114  # eV
+    energy_with_dispersion = (mf.kernel() + edisp[0]) * 27.2114                                                         # Add dispersion correction to the SCF energy (in eV).
 
-    forces = -grad * 27.2114  # Convert to eV/Angstrom
+    forces = -grad * 27.2114                                                                                            # Convert to eV/Angstrom.
 
     return energy_with_dispersion, forces
 
 
 def mf_grad_with_dftd3(geom, mf_grad_scan):
+    """
+        Connects the mean-field object with dftd3.
+
+        :param geom: The geometry of the system.
+        :param mf_grad_scan: Parameters of the mean-field object.
+        :return: Energy and gradient of energy (Force).
+    """
+
     e_tot, g_rhf = mf_grad_scan(geom)
     mol = mf_grad_scan.mol
     func = 'pbe0'.encode()
@@ -87,7 +93,6 @@ def mf_grad_with_dftd3(geom, mf_grad_scan):
     edisp = np.zeros(1)
     grad = np.zeros((mol.natm, 3))
 
-    # Run DFT-D3 dispersion corrections
     libdftd3.wrapper(ctypes.c_int(mol.natm),
                      coords.ctypes.data_as(ctypes.c_void_p),
                      itype.ctypes.data_as(ctypes.c_void_p),
@@ -95,42 +100,44 @@ def mf_grad_with_dftd3(geom, mf_grad_scan):
                      ctypes.c_int(version),
                      ctypes.c_int(tz),
                      edisp.ctypes.data_as(ctypes.c_void_p),
-                     grad.ctypes.data_as(ctypes.c_void_p))
+                     grad.ctypes.data_as(ctypes.c_void_p))                                                              # Run DFT-D3 dispersion corrections.
 
-    # Return the energy and gradients (no modification to forces)
-    e_tot += edisp[0]
+    e_tot += edisp[0]                                                                                                   # Return the energy and gradients (no modification to forces).
     g_rhf += grad
 
     return e_tot, g_rhf
 
 
 def setup_compound(atoms):
+    """
+        Sets up the compound and parameters of the DFT calculation.
+
+        :param atoms: 3D coordinates of the system.
+        :return: The packaged compound, calculation parameters and initial coordinates for the optimisation.
+    """
+
     symbols = [line.split()[0] for line in atoms]
     element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
 
-    start_time = time.time()
-
-    mol = gto.M(  # Define the molecule in PySCF
+    mol = gto.M(
         verbose=4,
         atom=atoms,
         basis='aug-cc-pvdz',
         unit='Angstrom',
         spin=get_spin(element_count)
-    )
+    )                                                                                                                   # Define the molecule in PySCF.
 
-    # Default settings
-    level_shift = 0.5
+    level_shift = 0.5                                                                                                   # Default settings.
     grid_level = 3
     damp = 0.2
     scf_convergence = 1e-4
     force_convergence = 1e-3
 
-    # Ask user if they want to edit the optimisation settings
     response = input("Would you like to edit the optimisation settings? "
-                     "(Default: Level Shift = 0.5, Grid Level = 3 (1 - 9), SCF Convergence = 1e-4, Force Convergence = 1e-3) "
-                     "(y/n): ").strip().lower()
+                     "(Default: Level Shift = 0.5, Grid Level = 3 (1 - 9), SCF Convergence = 1e-4, "
+                     "Force Convergence = 1e-3) (y/n): ").strip().lower()                                               # Ask user if they want to edit the optimisation settings.
 
-    if response == 'y':
+    if response == 'y':                                                                                                 # Get user inputs for settings.
         try:
             level_shift = float(input(f"Enter Level Shift (Default: {level_shift}): ") or level_shift)
             grid_level = int(input(f"Enter Grid Level (Default: {grid_level}): ") or grid_level)
@@ -143,7 +150,7 @@ def setup_compound(atoms):
             print("Invalid input detected, using default settings.")
 
     # mf_grad_scan = dft.RKS(mol).density_fit().nuc_grad_method().as_scanner().to_gpu()
-    mf_grad_scan = dft.RKS(mol).density_fit().to_gpu()
+    mf_grad_scan = dft.RKS(mol).density_fit().to_gpu()                                                                  # Run DFT on the GPU.
     # mf_grad_scan.base = scf.addons.remove_linear_dep_(mf_grad_scan.base)
     mf_grad_scan.base.verbose = 5
     mf_grad_scan.base.xc = 'pbe0'
@@ -155,13 +162,9 @@ def setup_compound(atoms):
     mf_grad_scan.base.conv_tol = scf_convergence
     mf_grad_scan.base.conv_tol_grad = force_convergence
 
-    # mf_grad_scan.base.grids.prune = dft.gen_grid.treutler_prune
     mf_grad_scan.grid_response = False
 
-    coords_init = mol.atom_coords()
-
-    end_time = time.time()
-    print("Setup compound time: ", end_time - start_time)
+    coords_init = mol.atom_coords()                                                                                     # Extract the initial coordinates.
 
     print("Initial coordinates: ", coords_init * lib.param.BOHR)
 
@@ -169,54 +172,62 @@ def setup_compound(atoms):
 
 
 def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_change_convergence=1e-09):
-    prev_coords = coords[:num_compound].copy()
-    prev_centroid = find_centroid(prev_coords)
-    prev_direction = find_direction(prev_coords)
+    """
+        Runs the optimisation that models how hydrogen adsorbs to the compound. Rigid body rules are enforced
+        on the compound throughout the optimisation to avoid compound atoms being pulled out of the compound.
+
+        :param mol: Compound setup as a molecule.
+        :param mf_grad_scan: Optimisation parameters.
+        :param coords: Initial coordinates.
+        :param num_compound: Number of atoms in the compound.
+        :param maxsteps: Sets the maximum number of steps for the optimisation.
+        :param force_change_convergence: Sets the convergence in force that ends the optimisation.
+        :return: Optimised coordinates.
+    """
+
+    prev_coords = coords[:num_compound].copy()                                                                          # Sets the initial coordinates of the compound.
+    prev_centroid = find_centroid(prev_coords)                                                                          # Find the original centroid of the compound.
+    prev_direction = find_direction(prev_coords)                                                                        # Find the original direction vectors between all of the compounds' atoms.
     # prev_distances = find_distances(prev_coords, prev_centroid)
 
-    mf = berny_solver.as_pyscf_method(mol, partial(mf_grad_with_dftd3, mf_grad_scan=mf_grad_scan))
-    mf.direct_scf = True
-    mf.diis = True  # Use DIIS for SCF convergence acceleration
+    mf = berny_solver.as_pyscf_method(mol, partial(mf_grad_with_dftd3, mf_grad_scan=mf_grad_scan))                      # Run optimisation using mf_grad_with_dftd3 as the method, using the parameters in mf_grad_scan.
+    # mf.direct_scf = True
+    mf.diis = True                                                                                                      # Use DIIS for SCF convergence acceleration.
 
-    prev_forces_array = None  # Initialize to None
+    prev_forces_array = None                                                                                            # Initialize to None.
 
     start_time = time.time()
 
     for step in range(maxsteps):
         print(f"OPTIMISATION STEP {step + 1}")
-
         print("Pre optimisation step coords: ", mol.atom_coords() * lib.param.BOHR)
 
-        # Perform optimization using the Berny solver
-        _, mol = berny_solver.kernel(mf, maxsteps=5)
-        current_coords = mol.atom_coords()
+        _, mol = berny_solver.kernel(mf, maxsteps=5)                                                                    # Perform optimization using the Berny solver - take in mf object and update the coordinates using force, to update mol.
+        current_coords = mol.atom_coords()                                                                              # Extract the current coordinates from mol.
 
         print("Post optimised coords: ", mol.atom_coords() * lib.param.BOHR)
 
-        current_fixed_coords = current_coords[:num_compound]
-        trans_vec = find_translation(current_fixed_coords, prev_centroid)
-        rotation_axis, angle = find_rotation(current_fixed_coords, prev_direction)
-        transformed_fixed_coords = apply_translation(prev_coords, trans_vec)
+        current_fixed_coords = current_coords[:num_compound]                                                            # Rigid body enforcement: Extract the atoms in the compound.
+        trans_vec = find_translation(current_fixed_coords, prev_centroid)                                               # Find the translation vector of the centroid as it moves.
+        rotation_axis, angle = find_rotation(current_fixed_coords, prev_direction)                                      # Find the rotation vector of the compound based on the previous direction  vector between its atoms.
+        transformed_fixed_coords = apply_translation(prev_coords, trans_vec)                                            # Translate the compound back to its original place.
 
         if rotation_axis is not None:
-            transformed_fixed_coords = apply_rotation(transformed_fixed_coords, rotation_axis, angle)
+            transformed_fixed_coords = apply_rotation(transformed_fixed_coords, rotation_axis, angle)                   # Rotate the compound back to its original orientation.
 
-        combined_coords = np.vstack((transformed_fixed_coords, current_coords[num_compound:]))
-        mol.set_geom_(combined_coords, unit="Bohr")
+        combined_coords = np.vstack((transformed_fixed_coords, current_coords[num_compound:]))                          # Append the hydrogen atoms to the 'fixed' compound atoms.
+        mol.set_geom_(combined_coords, unit="Bohr")                                                                     # Convert units to Bohr.
 
         print("Post adjusted coords: ", mol.atom_coords() * lib.param.BOHR)
 
-        # Calculate forces
-        e_tot, grad_values = mf_grad_with_dftd3(mol.atom_coords(), mf_grad_scan)
+        e_tot, grad_values = mf_grad_with_dftd3(mol.atom_coords(), mf_grad_scan)                                        # Calculate energy and forces.
 
-        forces_array = grad_values  # Forces at the current step
+        forces_array = grad_values                                                                                      # Forces at the current step.
 
-        # Initialize force_change for the first iteration
-        force_change = 0
+        force_change = 0                                                                                                # Initialize force_change.
 
         if prev_forces_array is not None:
-            # Compute the change in forces by comparing current forces with previous ones
-            force_change = np.linalg.norm(forces_array - prev_forces_array)
+            force_change = np.linalg.norm(forces_array - prev_forces_array)                                             # Compute the change in forces by comparing current forces with previous ones.
 
             print("Change in forces: ", force_change)
             print("Force change convergence threshold: ", force_change_convergence)
@@ -225,8 +236,7 @@ def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_chang
                 print(f"Convergence reached at step {step + 1} with force change {force_change:.5e}")
                 break
 
-        # Update the previous forces for the next iteration
-        prev_forces_array = forces_array.copy()
+        prev_forces_array = forces_array.copy()                                                                         # Update the previous forces for the next iteration.
 
         print(f"Step completed. Force change: {force_change:.5e}")
 
@@ -234,7 +244,7 @@ def optimiser(mol, mf_grad_scan, coords, num_compound, maxsteps=100, force_chang
 
     print("Optimisation time: ", end_time - start_time)
 
-    coords_optimized = mol.atom_coords()
+    coords_optimized = mol.atom_coords()                                                                                # Extract optimised coordinates.
 
     print("Coords Optimised: ", coords_optimized)
 
@@ -253,23 +263,23 @@ def calculate_energy(atoms):
     symbols = [line.split()[0] for line in atoms]
     element_count = [(atom, str(count)) for atom, count in Counter(symbols).items()]
 
-    mol = gto.M(                                                                                                        # Define the molecule in PySCF
+    mol = gto.M(
         verbose=5,
         atom=atoms,
         basis='6-31G',
         unit='Angstrom',
         spin=get_spin(element_count)
-    )
+    )                                                                                                                   # Define the molecule in PySCF.
 
     start_time = time.time()
 
     mf = dft.RKS(mol).density_fit()
 
     mf.direct_scf = True
-    mf.diis = True  # Use DIIS for SCF convergence acceleration
-    mf.set(default='dftd3')  # Use the 'dftd3' engine, or another depending on your method
+    mf.diis = True                                                                                                      # Use DIIS for SCF convergence acceleration.
+    mf.set(default='dftd3')                                                                                             # Use the 'dftd3' engine.
 
-    corrected_energy, forces = dftd3(mf, mol)                                                                           # Call the dftd3 function
+    corrected_energy, forces = dftd3(mf, mol)                                                                           # Call the dftd3 function.
 
     end_time = time.time()
 

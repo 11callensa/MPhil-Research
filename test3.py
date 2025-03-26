@@ -149,7 +149,7 @@ def calculate_energy(atoms):
         spin=get_spin(element_count)
     )
 
-    mf = dft.RKS(mol).density_fit().to_gpu()                                                                            # Setup system for DFT calculation
+    mf = dft.RKS(mol).density_fit()                                                                            # Setup system for DFT calculation
 
     mf.grids.level = 2  # Default is 3; increase for more accuracy, decrease for speed
     mf.direct_scf = True
@@ -158,10 +158,12 @@ def calculate_energy(atoms):
 
     mf.set(default='dftd3')  # Use the 'dftd3' engine, or another depending on your method
 
-    mf = mf.to_cpu()
+    # mf = mf.to_cpu()
+
+    corrected_energy = mf.kernel()
 
     start_time3 = time.time()
-    corrected_energy, forces = dftd3(mf, mol)                                                                           # Call the dftd3 function
+    # corrected_energy, forces = dftd3(mf, mol)                                                                           # Call the dftd3 function
     end_time3 = time.time()
     print("Time for dftd3: ", end_time3 - start_time3)
 

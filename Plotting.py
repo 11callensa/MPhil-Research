@@ -41,25 +41,21 @@ def plot_crystal(positions, edge_indices):
 
 def plot_external_surfaces(external_faces):
     """
-    Plots the external planes found by `surface_finder` in 3D.
+        Plots the external planes found by `surface_finder` in 3D.
 
-    :param external_faces: List of external surfaces, where each surface is a set of 3D points.
+        :param external_faces: List of external surfaces, where each surface is a set of 3D points.
     """
 
-    # Create 3D figure
-    fig = plt.figure()
+    fig = plt.figure()                                                                                                  # Create 3D figure.
     ax = fig.add_subplot(111, projection="3d")
 
-    # Iterate over each external face and plot it
-    for face in external_faces:
-        face = np.array(face)  # Convert to NumPy array for easy manipulation
+    for face in external_faces:                                                                                         # Iterate over each external face and plot it.
+        face = np.array(face)
         ax.add_collection3d(Poly3DCollection([face], alpha=0.5, edgecolor="k"))
 
-    # Scatter plot of the points (for reference)
-    all_points = np.vstack(external_faces)  # Stack all face points together
-    ax.scatter(all_points[:, 0], all_points[:, 1], all_points[:, 2], c="r", marker="o")
+    all_points = np.vstack(external_faces)                                                                              # Stack all face points together.
+    ax.scatter(all_points[:, 0], all_points[:, 1], all_points[:, 2], c="r", marker="o")                                 # Scatter plot of the points.
 
-    # Labels and view adjustments
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")

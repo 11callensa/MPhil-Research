@@ -287,17 +287,22 @@ def compute_bonds(positions):
 
 
 def reassociate_coordinates(raw_optimised_xyz, combined_xyz):
-    # Extract element symbols from combined_xyz
-    elements = [line.split()[0] for line in combined_xyz]
+    """
+        Re-associates the optimised coordinates with the corresponding atoms type.
 
-    # Ensure number of elements matches number of coordinates
-    if len(elements) != len(raw_optimised_xyz):
+        :param raw_optimised_xyz: Raw optimised 3D coordinates of the system.
+        :param combined_xyz: Un-optimised 3D coordinates of the system with atom types.
+        :return: Optimised 3D coordinates with atom types in XYZ format.
+    """
+
+    elements = [line.split()[0] for line in combined_xyz]                                                               # Extract element symbols from combined_xyz.
+
+    if len(elements) != len(raw_optimised_xyz):                                                                         # Ensure number of elements matches number of coordinates.
         raise ValueError("Mismatch between number of atoms and coordinates")
 
-    # Format new coordinates with atom labels
     optimised_xyz = [
         f"{elem} {x:.10f} {y:.10f} {z:.10f}"
         for elem, (x, y, z) in zip(elements, raw_optimised_xyz)
-    ]
+        ]                                                                                                               # Format new coordinates with atom labels.
 
     return optimised_xyz

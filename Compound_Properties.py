@@ -4,6 +4,13 @@ from mendeleev import element
 
 
 def get_spin(element_list):
+    """
+        Calculates the net spin of the system based on unpaired electrons.
+
+        :param element_list: Each type of element and how many of that element is present in the system.
+        :return: Net spin.
+    """
+
     unpaired_electrons = {
         'H': 1,
         'Li': 1,
@@ -48,18 +55,18 @@ def get_spin(element_list):
     total_electrons = 0
 
     for element, count in element_list:
-        count = int(count) if count else 1  # Default to 1 if no number is given
+        count = int(count) if count else 1                                                                              # Default to 1 if no number is given.
         if element in unpaired_electrons:
-            total_electrons += unpaired_electrons[element] * count  # Accumulate unpaired electrons
+            total_electrons += unpaired_electrons[element] * count                                                      # Accumulate unpaired electrons.
         else:
             print(f"Warning: Element '{element}' not defined in unpaired electrons.")
 
-    if total_electrons % 2 == 0:
-        total_unpaired = 0
-    else:
-        total_unpaired = 1
+    if total_electrons % 2 == 0:                                                                                        # If the electrons pair up, then net spin is 0.
+        spin = 0
+    else:                                                                                                               # Else if they don't then net spin is 1.
+        spin = 1
 
-    return total_unpaired
+    return spin
 
 
 def node_edge_features(centered_xyz, edge_indices, oxidation_states, num_fixed, flag):

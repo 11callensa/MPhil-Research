@@ -6,9 +6,9 @@ import Diffusion_Model
 import Energy_Model
 import Temperature_Model
 
-# run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3) Test on a preloaded model: ")
+run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3) Test on a preloaded model mode: ")
 
-run_choice = '1'
+# run_choice = '1'
 
 if run_choice == '1':
 
@@ -58,9 +58,9 @@ if run_choice == '1':
 
                 (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
                  diffusion_output_features, energy_input_features, energy_output_features,
-                 temp_input_features, temp_output_features, uncertain_features, num_fixed, num_H) = training_features
+                 temp_input_features, temp_output_features, uncertain_features, num_fixed, num_H) = training_features   # Extract every aspect of training data that will be saved.
 
-                with open(diffusion_filename, mode='a', newline='') as file:  # Append mode
+                with open(diffusion_filename, mode='a', newline='') as file:                                            # Append mode.
                     writer = csv.writer(file)
                     writer.writerow([f'{compound}', str(node_features[0]),
                                      str(edge_features[0]), str(node_features[1]), str(edge_features[1]),
@@ -69,7 +69,7 @@ if run_choice == '1':
 
                 print(f"Saved diffusion training data for {compound} to {diffusion_filename} CSV.")
 
-                with open(energy_filename, mode='a', newline='') as file1:  # Append mode
+                with open(energy_filename, mode='a', newline='') as file1:                                              # Append mode.
                     writer = csv.writer(file1)
                     writer.writerow([f'{compound}', str([node_features[1], node_features[2], node_features[4]]),
                                      str([edge_features[1], edge_features[2], edge_features[4]]),
@@ -78,7 +78,7 @@ if run_choice == '1':
 
                 print(f"Saved energy training data for {compound} to {energy_filename} CSV.")
 
-                with open(temperature_filename, mode='a', newline='') as file2:  # Append mode
+                with open(temperature_filename, mode='a', newline='') as file2:                                         # Append mode.
                     writer = csv.writer(file2)
                     writer.writerow([f'{compound}', str(node_features[1]), str(edge_features[1]), str(edge_indices[0]),
                                      str(temp_input_features), str(temp_output_features), str(uncertain_features),
@@ -106,29 +106,27 @@ if run_choice == '1':
                                                   'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
 
         for filename, header in file_data:
-            try:
-                # Try creating the file in exclusive ('x') mode
+            try:                                                                                                        # Try creating the file in exclusive ('x') mode.
                 with open(filename, mode='x', newline='') as file:
                     writer = csv.writer(file)
-                    writer.writerow(header)  # Write the header if the file is new
+                    writer.writerow(header)                                                                             # Write the header if the file is new.
                     print(f"{filename} setup complete (new file created).")
 
             except FileExistsError:
                 print(f"File '{filename}' already exists. Appended new row.")
 
         for compound in compound_ID_set:
-
-            compound_ID = compound_ID_set[compound][0]
+            compound_ID = compound_ID_set[compound][0]                                                                  # Loop through each of the compounds to extract data.
 
             try:
                 print(f"Processing Compound: {compound}")
 
-                testing_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)
+                testing_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)                     # Run data creator in test mode.
 
                 (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
-                 energy_input_features, uncertain_features, num_fixed, num_H) = testing_features
+                 energy_input_features, uncertain_features, num_fixed, num_H) = testing_features                        # Extract every aspect of testing data that will be saved.
 
-                with open(diffusion_test_filename, mode='a', newline='') as file:  # Append mode
+                with open(diffusion_test_filename, mode='a', newline='') as file:                                       # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str(node_features[0]), str(edge_features[0]), str(edge_indices[0]),
@@ -137,7 +135,7 @@ if run_choice == '1':
 
                 print(f"Saved diffusion testing data for {compound} to CSV.")
 
-                with open(energy_test_filename, mode='a', newline='') as file:  # Append mode
+                with open(energy_test_filename, mode='a', newline='') as file:                                          # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str(node_features), str(edge_features), str(edge_indices),
@@ -145,7 +143,7 @@ if run_choice == '1':
 
                 print(f"Saved energy testing data for {compound} CRYSTAL ALONE to CSV.")
 
-                with open(temperature_test_filename, mode='a', newline='') as file:  # Append mode
+                with open(temperature_test_filename, mode='a', newline='') as file:                                     # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', '' , '', str(edge_indices[0]), '', str(uncertain_features), str(num_fixed), str(num_H)])

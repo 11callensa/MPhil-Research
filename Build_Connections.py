@@ -1,12 +1,18 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.spatial import KDTree
 import csv
 import os
 
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.spatial import KDTree
+
 
 def load_existing_edges(name):
-    """ Load existing edges from the CSV file. """
+    """
+        Load existing edges from the CSV file.
+
+        :return: The edge indices from the file.
+    """
+
     CSV_FILE = f"Edge Indices/edge_indices_{name}.csv"  # CSV file storing connections
     if not os.path.exists(CSV_FILE):
         print("Does not exist")
@@ -18,190 +24,81 @@ def load_existing_edges(name):
 
 
 def save_edges_to_csv(edges, name):
-    """ Save the updated edge list to the CSV file. """
+    """
+        Save the updated edge list to the CSV file.
+    """
+
     CSV_FILE = f"Edge Indices/edge_indices_{name}.csv"  # CSV file storing connections
     with open(CSV_FILE, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerows(edges)
 
 
-# def build_connections(positions, num_fixed, name):
-#     # Parse positions into atom coordinates
-#     atom_coordinates = np.array([list(map(float, pos.split()[1:])) for pos in positions])
-#
-#     # Load existing edges from CSV
-#     edge_indices = load_existing_edges(name)
-#
-#     # Function to plot everything
-#     def draw_plot():
-#         ax.clear()
-#
-#         # Plot atoms: Orange for first num_fixed, Red for others
-#         colors = ['black' if i < num_fixed else 'red' for i in range(len(atom_coordinates))]
-#         ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c=colors, marker='o')
-#
-#         # Label atoms
-#         for i, (x, y, z) in enumerate(atom_coordinates):
-#             ax.text(x, y, z, str(i), color='black')
-#
-#         # Draw bonds
-#         for bond in edge_indices:
-#             i, j = bond
-#             if i < num_fixed and j < num_fixed:
-#                 bond_color = 'g'  # Green for connections within num_fixed atoms
-#             else:
-#                 bond_color = 'b'  # Blue if at least one atom is outside num_fixed
-#
-#             ax.plot([atom_coordinates[i, 0], atom_coordinates[j, 0]],
-#                     [atom_coordinates[i, 1], atom_coordinates[j, 1]],
-#                     [atom_coordinates[i, 2], atom_coordinates[j, 2]], c=bond_color)
-#
-#         plt.draw()
-#
-#     # Create figure
-#     fig = plt.figure()
-#     ax = fig.add_subplot(111, projection='3d')
-#
-#     # Show initial plot
-#     draw_plot()
-#     plt.show()
-#
-#     while True:
-#         # Ask user to add or delete edges
-#         print("\nCurrent edges:", edge_indices)
-#         action = input("Enter 'add' to add edges, 'del' to delete edges, 'done' to finish: ").strip().lower()
-#
-#         if action == 'add':
-#             user_input = input("Enter new edges (e.g., [[0, 1], [2, 3]]): ").strip()
-#             try:
-#                 new_edges = eval(user_input)  # Convert string input to list
-#                 if not all(isinstance(edge, list) and len(edge) == 2 for edge in new_edges):
-#                     print("Invalid format! Use [[0,1],[2,3]]")
-#                     continue
-#
-#                 for edge in new_edges:
-#                     edge = sorted(edge)  # Ensure undirected consistency
-#                     if edge not in edge_indices:
-#                         edge_indices.append(edge)
-#                     else:
-#                         print(f"Edge {edge} already exists!")
-#
-#                 draw_plot()
-#
-#             except Exception as e:
-#                 print(f"Invalid input: {e}")
-#
-#         elif action == 'del':
-#             user_input = input("Enter edges to delete (e.g., [[0, 1], [2, 3]]): ").strip()
-#             try:
-#                 edges_to_delete = eval(user_input)
-#                 for edge in edges_to_delete:
-#                     edge = sorted(edge)  # Normalize
-#                     if edge in edge_indices:
-#                         edge_indices.remove(edge)
-#                     else:
-#                         print(f"Edge {edge} not found!")
-#
-#                 draw_plot()
-#
-#             except Exception as e:
-#                 print(f"Invalid input: {e}")
-#
-#         elif action == 'done':
-#             break
-#
-#         else:
-#             print("Invalid choice, enter 'add', 'del', or 'done'.")
-#
-#     # Save updated edges to CSV
-#     save_edges_to_csv(edge_indices, name)
-#
-#     return edge_indices
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.spatial import KDTree
-
-
 def build_connections(positions, num_fixed, name):
     """
-    Build connections for a crystal structure.
+        Build connections for a crystal structure. It keeps the original compound edges unchanged while connecting
+        each hydrogen atom to n nearest hydrogen atoms.It also connects each hydrogen atom to at least m nearest
+        compound atoms.
 
-    - Keeps the original compound edges unchanged.
-    - Connects each hydrogen atom to 4 nearest hydrogen atoms.
-    - Connects each hydrogen atom to at least 4 nearest compound atoms.
-
-    :param positions: List of atomic positions as strings.
-    :param num_fixed: Number of atoms in the compound (fixed structure).
-    :param name: Name used to load/save edge indices.
-    :return: Updated edge indices.
+        :param positions: List of atomic positions as strings.
+        :param num_fixed: Number of atoms in the compound (fixed structure).
+        :param name: Name used to load/save edge indices.
+        :return: Updated edge indices.
     """
 
-    # Parse positions into numpy array
-    atom_coordinates = np.array([list(map(float, pos.split()[1:])) for pos in positions])
+    atom_coordinates = np.array([list(map(float, pos.split()[1:])) for pos in positions])                               # Parse positions into numpy array.
 
-    # Load existing edges (these must remain unchanged)
-    edge_indices = load_existing_edges(name)
+    edge_indices = load_existing_edges(name)                                                                            # Load existing edges.
 
-    # Separate compound atoms and hydrogen atoms
-    compound_coords = atom_coordinates[:num_fixed]  # First 63 atoms
-    hydrogen_coords = atom_coordinates[num_fixed:]  # Remaining atoms
+    compound_coords = atom_coordinates[:num_fixed]                                                                      # Separate compound atoms and hydrogen atoms.
+    hydrogen_coords = atom_coordinates[num_fixed:]
 
-    # Create KDTree for nearest neighbor search
-    tree_compound = KDTree(compound_coords)
+    tree_compound = KDTree(compound_coords)                                                                             # Create KDTree for nearest neighbor search.
     tree_hydrogen = KDTree(hydrogen_coords)
 
-    # Find 4 nearest hydrogen neighbors for each hydrogen atom
-    for i in range(len(hydrogen_coords)):
-        global_index = num_fixed + i  # Convert hydrogen index to global index
-        _, neighbor_indices = tree_hydrogen.query(hydrogen_coords[i], k=7)  # Get 5 (includes self)
-        for neighbor in neighbor_indices[1:]:  # Skip self (first index)
-            edge = tuple(sorted([global_index, num_fixed + neighbor]))  # Undirected
+    for i in range(len(hydrogen_coords)):                                                                               # Find n nearest hydrogen neighbors for each hydrogen atom.
+        global_index = num_fixed + i                                                                                    # Convert hydrogen index to global index.
+        _, neighbor_indices = tree_hydrogen.query(hydrogen_coords[i], k=7)                                              # Get n (includes self).
+        for neighbor in neighbor_indices[1:]:                                                                           # Skip self (first index).
+            edge = tuple(sorted([global_index, num_fixed + neighbor]))                                                  # Undirected.
             if edge not in edge_indices:
                 edge_indices.append(edge)
 
-    # Find at least 4 nearest compound atoms for each hydrogen atom
-    for i in range(len(hydrogen_coords)):
+    for i in range(len(hydrogen_coords)):                                                                               # Find at least m nearest compound atoms for each hydrogen atom.
         global_index = num_fixed + i
-        _, neighbor_indices = tree_compound.query(hydrogen_coords[i], k=2)  # Get 4 closest compound atoms
+        _, neighbor_indices = tree_compound.query(hydrogen_coords[i], k=2)                                              # Get m closest compound atoms.
         for neighbor in neighbor_indices:
-            edge = tuple(sorted([global_index, neighbor]))  # Undirected
+            edge = tuple(sorted([global_index, neighbor]))                                                              # Undirected.
             if edge not in edge_indices:
                 edge_indices.append(edge)
 
-    # Function to visualize connections
-    def draw_plot():
+    def draw_plot():                                                                                                    # Function to visualize connections.
         ax.clear()
 
-        # Color compound atoms black, hydrogen atoms red
-        colors = ['black' if i < num_fixed else 'red' for i in range(len(atom_coordinates))]
+        colors = ['black' if i < num_fixed else 'red' for i in range(len(atom_coordinates))]                            # Color compound atoms black, hydrogen atoms red.
         ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c=colors, marker='o')
 
-        # Label atoms
-        for i, (x, y, z) in enumerate(atom_coordinates):
+        for i, (x, y, z) in enumerate(atom_coordinates):                                                                # Label atoms.
             ax.text(x, y, z, str(i), color='black')
 
-        # Draw bonds
-        for bond in edge_indices:
+        for bond in edge_indices:                                                                                       # Draw bonds.
             i, j = bond
-            bond_color = 'g' if i < num_fixed and j < num_fixed else 'b'  # Green = compound bonds, Blue = hydrogen bonds
+            bond_color = 'g' if i < num_fixed and j < num_fixed else 'b'                                                # Green = compound bonds, Blue = hydrogen bonds
             ax.plot([atom_coordinates[i, 0], atom_coordinates[j, 0]],
                     [atom_coordinates[i, 1], atom_coordinates[j, 1]],
                     [atom_coordinates[i, 2], atom_coordinates[j, 2]], c=bond_color)
 
         plt.draw()
 
-    # Plot the updated structure
-    fig = plt.figure()
+    fig = plt.figure()                                                                                                  # Plot the updated structure.
     ax = fig.add_subplot(111, projection='3d')
     draw_plot()
     plt.show()
 
-    # Save updated edges
-    save_edges_to_csv(edge_indices, name)
+    save_edges_to_csv(edge_indices, name)                                                                               # Save updated edges.
 
     return edge_indices
+
 
 name = 'LiH-Trial'
 num_fixed = 8

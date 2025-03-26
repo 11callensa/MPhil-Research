@@ -1,5 +1,6 @@
-import pandas as pd
 import ast
+import os
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,46 +8,48 @@ from torch_geometric.nn import GCNConv
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog, simpledialog
-import os
+
+
+def parse_column(df, col_name, dtype=torch.float32):  # Function to safely parse string representations of nested lists.
+    value = df[col_name].iloc[0]  # Get first row.
+
+    try:
+        parsed_value = ast.literal_eval(value)  # Convert string to Python list.
+
+        if col_name in ['Diffusion Initial Coords', 'Diffusion Output Coords']:  # Extract only the x, y, z coordinates.
+            parsed_value = [[float(coord) for coord in line.split()[1:]] for line in parsed_value]
+            return torch.tensor(parsed_value, dtype=dtype)  # Convert to tensor.
+
+        if col_name == 'Edge Indices Combined':
+            parsed_value = torch.tensor(list(zip(*ast.literal_eval(value))),
+                                        dtype=torch.int64)  # Convert to tensor and convert all values to 64 bit.
+            return parsed_value
+
+        return torch.tensor(parsed_value, dtype=dtype)  # Convert other columns normally.
+
+    except (ValueError, SyntaxError) as e:
+        print(f"Error parsing {col_name}: {e}")
+        return None
 
 
 def load_training_data(csv_path):
-    # Read the CSV file
-    df = pd.read_csv(csv_path)
+    """
+        Extracts the node and edge features, edge indices and target output coordinates. All features are normalised.
 
-    # Function to safely parse string representations of nested lists
-    def parse_column(col_name, dtype=torch.float32):
-        value = df[col_name].iloc[0]  # Get first row
+        :param csv_path: Path of the training data file.
+        :return: All features stored in one variable.
+    """
 
-        try:
-            parsed_value = ast.literal_eval(value)  # Convert string to Python list
+    df = pd.read_csv(csv_path)                                                                                          # Read the CSV file.
 
-            # Special case for coordinate parsing
-            if col_name in ['Diffusion Initial Coords', 'Diffusion Output Coords']:
-                # Extract only the x, y, z coordinates
-                parsed_value = [[float(coord) for coord in line.split()[1:]] for line in parsed_value]
-                return torch.tensor(parsed_value, dtype=dtype)  # Convert to tensor
+    node_features = parse_column(df, 'Node Features Initial Combined')                                         # Extract each set of features.
+    edge_features = parse_column(df, 'Edge Features Initial Combined')
+    edge_indices = parse_column(df, 'Edge Indices Combined').to(torch.int64)
+    system_features = parse_column(df, 'Diffusion Input Features')
+    initial_coords = parse_column(df, 'Diffusion Initial Coords')
+    output_coords = parse_column(df, 'Diffusion Output Coords')
 
-            if col_name == 'Edge Indices Combined':
-                parsed_value = torch.tensor(list(zip(*ast.literal_eval(value))), dtype=torch.int64)
-                return parsed_value
-
-            return torch.tensor(parsed_value, dtype=dtype)  # Convert other columns normally
-
-        except (ValueError, SyntaxError) as e:
-            print(f"Error parsing {col_name}: {e}")
-            return None  # Return None if there's an issue
-
-    # Convert each column
-    node_features = parse_column('Node Features Initial Combined')
-    edge_features = parse_column('Edge Features Initial Combined')
-    edge_indices = parse_column('Edge Indices Combined').to(torch.int64)
-    system_features = parse_column('Diffusion Input Features')
-    initial_coords = parse_column('Diffusion Initial Coords')
-    output_coords = parse_column('Diffusion Output Coords')
-
-    # Convert num_fixed_atoms to int
-    try:
+    try:                                                                                                                # Convert num_fixed_atoms to int.
         num_fixed_atoms = int(df['Num. Fixed Atoms'].iloc[0])
     except ValueError:
         print("Error converting 'Num Fixed' to int")
@@ -63,17 +66,36 @@ def load_training_data(csv_path):
     }
 
 
-def preprocess_node_features(node_features):
+def load_testing_data(csv_path):
     """
-    Extracts mass, proton number, and electron number from each node's feature list.
+        Extracts the node and edge features, edge indices. All features are normalised.
 
-    Args:
-        node_features (torch.Tensor): Tensor of shape (num_atoms, feature_dim)
-
-    Returns:
-        torch.Tensor: Processed node features of shape (num_atoms, 3)
+        :param csv_path: Path of the testing data file.
+        :return: All features stored in one variable.
     """
-    return node_features[:, 0:6]  # Extract columns 3, 4, and 5
+
+    df = pd.read_csv(csv_path)                                                                                          # Read the CSV file.
+
+    node_features = parse_column(df, 'Node Features Initial Combined')                                         # Extract each set of features.
+    edge_features = parse_column(df, 'Edge Features Initial Combined')
+    edge_indices = parse_column(df, 'Edge Indices Combined').to(torch.int64)
+    system_features = parse_column(df, 'Diffusion Input Features')
+    initial_coords = parse_column(df, 'Diffusion Initial Coords')
+
+    try:
+        num_fixed_atoms = int(df['Num. Fixed Atoms'].iloc[0])
+    except ValueError:
+        print("Error converting 'Num Fixed' to int")
+        num_fixed_atoms = None
+
+    return {
+        "node_features": node_features,
+        "edge_features": edge_features,
+        "edge_indices": edge_indices,
+        "system_features": system_features,
+        "initial_coords": initial_coords,
+        "num_fixed_atoms": num_fixed_atoms
+    }
 
 
 class Normaliser():
@@ -154,19 +176,21 @@ class GNN(nn.Module):
 
 
 def run_training():
-    # Initialize Tkinter root for file selection
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
+    """
+        Opens the training file, extracts and normalises data and runs training on the GNN.
+        The GNN full model parameters are then saved for use in testing later.
+    """
 
-    # Open file dialog to select training CSV file
-    file_path = filedialog.askopenfilename(title="Select CSV File", filetypes=[("CSV Files", "*.csv")])
+    root = tk.Tk()
+    root.withdraw()                                                                                                     # Hide the root window.
+
+    file_path = filedialog.askopenfilename(title="Select CSV File", filetypes=[("CSV Files", "*.csv")])                 # Open file dialog to select training CSV file.
     if not file_path:
         print("No file selected. Exiting...")
         return
 
-    # Load the diffusion data from the selected file
-    data = load_training_data(file_path)
-    data["node_features"] = preprocess_node_features(data["node_features"])
+    data = load_training_data(file_path)                                                                                # Load the diffusion data from the selected file.
+    data["node_features"] = data["node_features"][:, 0:6]                                                               # Extract the first 7 features.
 
     epochs = 100
 
@@ -189,25 +213,25 @@ def run_training():
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
     loss_train_list = []
 
+    loss_func = nn.MSELoss()
+
     for epoch in range(epochs):
         model.train()
 
         train_loss = 0
 
-        # Extract data
-        node_features = data["node_features"]
+        node_features = data["node_features"]                                                                           # Extract node and edge features, edge indices and output coordinates.
         edge_index = data["edge_indices"]
         edge_attr = data["edge_features"]
         output_coords = data["output_coords"]
 
         predicted_coords = model(node_features, edge_index, edge_attr)
 
-        # Compute loss (using MSE loss)
-        loss = F.mse_loss(predicted_coords, output_coords)
+        loss = loss_func(predicted_coords, output_coords)                                                               # Compute loss.
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        optimizer.zero_grad()                                                                                           # Clear gradients.
+        loss.backward()                                                                                                 # Backpropagate.
+        optimizer.step()                                                                                                # Step the optimiser.
 
         train_loss += loss.item()
 
@@ -224,7 +248,6 @@ def run_training():
     plt.title(f'Train and Test Losses')
     plt.show()
 
-    # Define the hyperparameters dictionary
     hyperparameters = {
         "node_dim": node_size,
         "hidden_node_dim": node_hidden_size,
@@ -235,104 +258,49 @@ def run_training():
         "hidden_gnn_dim1": hidden_size1,
         "hidden_gnn_dim2": hidden_size2,
         "output_gnn_dim": gnn_output_size
-    }
+    }                                                                                                                   # Store the hyperparameters in a dictionary for saving.
 
-    # Request user input for model name
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
+    root = tk.Tk()                                                                                                      # Request user input for model name.
+    root.withdraw()                                                                                                     # Hide the root window.
 
     model_name = simpledialog.askstring("Input", "Enter the model name:")
     if not model_name:
         print("No model name entered. Exiting...")
         exit()
 
-    # Save the trained model in a folder along with its hyperparameters
-    model_dir = "Coordinate GNN Models"
+    model_dir = "Coordinate GNN Models"                                                                                 # Save the trained model in a folder along with its hyperparameters.
     os.makedirs(model_dir, exist_ok=True)
-
     model_save_path = os.path.join(model_dir, f"coordinate_model_{model_name}.pt")
 
-    # Create a dictionary to store both the state_dict and hyperparameters
     model_data = {
         "model_state_dict": model.state_dict(),
         "hyperparameters": hyperparameters
-    }
+    }                                                                                                                   # Create a dictionary to store both the state_dict and hyperparameters.
 
-    # Save the model data
-    torch.save(model_data, model_save_path)
+    torch.save(model_data, model_save_path)                                                                             # Save the model data.
 
     print(f"Model and hyperparameters saved at: {model_save_path}")
 
 
-def load_testing_data(csv_path):
-    # Read the CSV file
-    df = pd.read_csv(csv_path)
-
-    # Function to safely parse string representations of nested lists
-    def parse_column(col_name, dtype=torch.float32):
-        value = df[col_name].iloc[0]  # Get first row
-
-        try:
-            parsed_value = ast.literal_eval(value)  # Convert string to Python list
-
-            # Special case for coordinate parsing
-            if col_name == 'Diffusion Initial Coords':
-                # Extract only the x, y, z coordinates
-                parsed_value = [[float(coord) for coord in line.split()[1:]] for line in parsed_value]
-                return torch.tensor(parsed_value, dtype=dtype)  # Convert to tensor
-
-            if col_name == 'Edge Indices Combined':
-                parsed_value = torch.tensor(list(zip(*ast.literal_eval(value))), dtype=torch.int64)
-                return parsed_value
-
-            return torch.tensor(parsed_value, dtype=dtype)  # Convert other columns normally
-
-        except (ValueError, SyntaxError) as e:
-            print(f"Error parsing {col_name}: {e}")
-            return None  # Return None if there's an issue
-
-    # Convert each column
-    node_features = parse_column('Node Features Initial Combined')
-    edge_features = parse_column('Edge Features Initial Combined')
-    edge_indices = parse_column('Edge Indices Combined').to(torch.int64)
-    system_features = parse_column('Diffusion Input Features')
-    initial_coords = parse_column('Diffusion Initial Coords')
-
-    try:
-        num_fixed_atoms = int(df['Num. Fixed Atoms'].iloc[0])
-    except ValueError:
-        print("Error converting 'Num Fixed' to int")
-        num_fixed_atoms = None
-
-    return {
-        "node_features": node_features,
-        "edge_features": edge_features,
-        "edge_indices": edge_indices,
-        "system_features": system_features,
-        "initial_coords": initial_coords,
-        "num_fixed_atoms": num_fixed_atoms
-    }
-
-
 def run_testing():
-    # Initialize Tkinter root for file selection
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
+    """
+        Opens the testing file, extracts and normalises data and runs training on the GNN.
+    """
 
-    # Step 1: Select the testing CSV file
-    testing_file_path = filedialog.askopenfilename(title="Select Testing CSV File", filetypes=[("CSV Files", "*.csv")])
+    root = tk.Tk()                                                                                                      # Initialize Tkinter root for file selection.
+    root.withdraw()                                                                                                     # Hide the root window.
+
+    testing_file_path = filedialog.askopenfilename(title="Select Testing CSV File", filetypes=[("CSV Files", "*.csv")]) # Select the testing CSV file.
     if not testing_file_path:
         print("No file selected. Exiting...")
         return
 
-    # Load the testing data (you can implement your own loading function similar to load_diffusion_data)
-    print(f"Selected testing file: {testing_file_path}")
+    print(f"Selected testing file: {testing_file_path}")                                                                # Load the testing data.
     data = load_testing_data(testing_file_path)
 
-    data["node_features"] = preprocess_node_features(data["node_features"])
+    data["node_features"] = data["node_features"][:, 0:6]                                                               # Extract the first 7 node features per node.
 
-    # Step 2: Select the model to test
-    model_dir = "Coordinate GNN Models"
+    model_dir = "Coordinate GNN Models"                                                                                 # Select the model to test.
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
                                                  filetypes=[("PyTorch Models", "*.pt")])
 
@@ -342,11 +310,9 @@ def run_testing():
 
     print(f"Selected model: {model_file_path}")
 
-    # Load the model and hyperparameters
-    model_data = torch.load(model_file_path)
+    model_data = torch.load(model_file_path)                                                                            # Load the model and hyperparameters.
 
-    # Retrieve the hyperparameters and use them to initialize the model
-    hyperparameters = model_data["hyperparameters"]
+    hyperparameters = model_data["hyperparameters"]                                                                     # Retrieve the hyperparameters and use them to initialize the model.
 
     model = GNN(
         node_dim=hyperparameters["node_dim"],
@@ -360,9 +326,8 @@ def run_testing():
         output_gnn_dim=hyperparameters["output_gnn_dim"]
     )
 
-    # Load the state_dict (weights)
-    model.load_state_dict(model_data["model_state_dict"])
-    model.eval()  # Set the model to evaluation mode
+    model.load_state_dict(model_data["model_state_dict"])                                                               # Load the state_dict (weights).
+    model.eval()                                                                                                        # Set the model to evaluation mode.
 
     with torch.no_grad():
         node_features = data["node_features"]
