@@ -29,7 +29,28 @@ def load_existing_edges(name):
         return [list(map(int, row)) for row in reader]
 
 
-def save_xyz(atom_symbols, coords, filepath):
+def save_original_xyz(atom_lines, directory, filename):
+    """
+    Write atoms and coordinates to an XYZ file.
+
+    Parameters:
+    - atom_lines: list of strings, each like 'H 0.0 0.0 0.0'
+    - directory: path to directory where file should be saved
+    - filename: name of the output file (should end in .xyz)
+    """
+    os.makedirs(directory, exist_ok=True)
+    filepath = os.path.join(directory, filename)
+
+    with open(filepath, "w") as f:
+        f.write(f"{len(atom_lines)}\n")
+        f.write("0 1\n")
+        for line in atom_lines:
+            f.write(f"{line}\n")
+
+    print(f"XYZ file saved to: {filepath}")
+
+
+def save_opt_xyz(atom_symbols, coords, filepath):
     if not filepath.endswith('.xyz'):
         filepath += '.xyz'
     with open(filepath, 'w') as f:
@@ -40,7 +61,7 @@ def save_xyz(atom_symbols, coords, filepath):
     print(f"\nSaved optimised geometry to: {filepath}")
 
 
-def save_optimised_coords(coords, filename):
+def save_opt_csv(coords, filename):
     """
         Save a list of 3D coordinates to a CSV file.
 

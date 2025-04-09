@@ -16,10 +16,10 @@ def set_train_materials():
 
     hydrogen = 'H2'
 
-    compound_test = {'LiH-Trial': 'mp-23703'}
+    # compound_test = {'LiH-Trial': 'mp-23703'}
 
     # compound = {'TiO2-A': 'mp-390'}
-                # 'TiO2-R': 'mp-1041565',
+    compound = {'TiO2-R': 'mp-1041565'}
                 # 'Pt': 'mp-126',
                 # 'Ni': 'mp-23',
                 # 'Pd': 'mp-2',
@@ -50,7 +50,7 @@ def set_train_materials():
                 # 'GaAs': 'mp-2354',
                 # 'Re': 'mp-1186901'}
 
-    return hydrogen, compound_test
+    return hydrogen, compound
 
 
 def set_test_materials():

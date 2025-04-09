@@ -19,7 +19,7 @@ from functools import partial
 from Compound_Properties import get_spin
 from Mol_Geometry import (find_centroid, find_direction, find_distances, find_translation, find_rotation,
                           apply_translation, apply_rotation)
-from External_Saving import save_optimised_coords
+from External_Saving import save_opt_csv
 
 
 _loaderpath = 'libdftd3-master/lib'
@@ -329,7 +329,7 @@ def calculate_energy(atoms):
 # raw_optimised_xyz = optimiser(mol, mf_grad_scan, initial_coordinates, num_atoms)
 file = f'Optimised Coordinates/{name}_optimised_coords'
 
-save_optimised_coords(raw_optimised_xyz, file)
+save_opt_csv(raw_optimised_xyz, file)
 
 ######################################################
 
