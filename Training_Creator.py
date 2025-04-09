@@ -4,7 +4,7 @@ from Materials_Extractor import extract_hydrogen, extract_compound, compute_bond
 from Plotting import plot_crystal, plot_external_surfaces
 from Mol_Geometry import surface_finder, compute_volume, centre_coords, place_hydrogen
 from External_Saving import save_edges_to_csv, load_existing_edges, load_optimised_coords
-# from DFT import setup_compound, optimiser, calculate_energy
+from DFT_New import calculate_energy, optimise_geometry
 from Compound_Properties import get_spin, node_edge_features, mass_and_charge
 
 
@@ -15,11 +15,6 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     compound_xyz, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features = (
         extract_compound(compound_ID, name))                                                                            # Extract coordinates, oxidation states, mechanical features, temperatures and features that could be used.
-
-    # compound_xyz = ['Li 0.0000000000 0.0000000000 0.0000000000', 'Li 0.0000000000 -2.0086193919 -2.0086193919',
-    #                 'Li 2.0086193919 -2.0086193919 0.0000000000', 'Li 2.0086193919 0.0000000000 -2.0086193919',
-    #                 'H 0.0000000000 -2.0086193919 0.0000000000', 'H 0.0000000000 0.0000000000 -2.0086193919',
-    #                 'H 2.0086193919 0.0000000000 0.0000000000', 'H 2.0086193919 -2.0086193919 -2.0086193919']
 
     print("Uncertain TEST features: ", uncertain_features)
 
@@ -155,39 +150,13 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     if test_train == '1':
 
-        while True:
-            crystal_energy_input = input("Run 'calculate energy' in the DFT script as follows: "
-                                         "'energy_crystal, _ = calculate_energy(centered_xyz)', "
-                                         "where 'centered_xyz' is printed at the start of data_creator. "
-                                         "When this is done, type 'done': ")
+        energy_crystal = calculate_energy(centered_xyz)
+        print('Crystal alone energy: ', energy_crystal)
 
-            if crystal_energy_input.lower() == 'done':
-                try:
-                    energy_crystal = float(input("Input the energy of the crystal alone: "))
-                    break
-                except ValueError:
-                    print("Invalid input! Please enter a numeric value for the energy.")
-            else:
-                print("Invalid response. Please type 'done' when ready.")
+        optimised_xyz_raw = optimise_geometry(combined_xyz, num_atoms, name)
+        print('Raw optimised xyz: ', optimised_xyz_raw)
 
-        ###################### Optimisation ######################
-
-        while True:
-            opt_input = input("Run the optimiser (Second block of commented code) in the DFT script as follows"
-                              "using the combined_xyz printed above. When this is done, type 'done': ")
-
-            if opt_input.lower() == 'done':
-                file = f'Optimised Coordinates/{name}_optimised_coords'
-                raw_optimised_xyz = load_optimised_coords(file)
-                break
-            else:
-                print("Invalid response. Please type 'done' when ready.")
-
-        print("Uncentered optimised XYZ: ", raw_optimised_xyz)
-
-        reassociate_xyz = reassociate_coordinates(raw_optimised_xyz, combined_xyz)                                      # Re-associate the optimisated cooridnates with the atoms types.
-
-        optimised_xyz, optimised_centre = centre_coords(reassociate_xyz, num_atoms)                                     # Centre all atoms around the crystal's centroid.
+        optimised_xyz, optimised_centre = centre_coords(optimised_xyz_raw, num_atoms)                                     # Centre all atoms around the crystal's centroid.
 
         print("Centered optimised XYZ: ", optimised_xyz)
         print("Optimised centre: ", optimised_centre)
@@ -203,23 +172,10 @@ def data_creator(hydrogen, compound_ID, name, test_train):
         print("Edge features optimised combined: ", edge_features_opt_comb)
 
         volume_opt_comb = compute_volume(optimised_xyz)                                                                 # Compute the volume encapsulated by the optimised system.
-
         print("Volume optimised combined: ", volume_opt_comb)
 
-        while True:
-            combined_energy_input = input("Run 'calculate energy' in the DFT script as follows: "
-                                         "'energy_comb, _ = calculate_energy(optimised_xyz)', "
-                                         "where 'optimised_xyz' is printed at the start of data_creator. "
-                                         "When this is done, type 'done': ")
-
-            if combined_energy_input.lower() == 'done':  # Case insensitive check
-                try:
-                    energy_comb = float(input("Input the energy of the combined optimimised system: "))
-                    break  # Exit loop after getting a valid energy input
-                except ValueError:
-                    print("Invalid input! Please enter a numeric value for the energy.")
-            else:
-                print("Invalid response. Please type 'done' when ready.")
+        energy_comb = calculate_energy(optimised_xyz)
+        print('Combined energy: ', energy_comb)
 
         #################### Optimised H alone Code ##################
 
@@ -234,26 +190,11 @@ def data_creator(hydrogen, compound_ID, name, test_train):
         print("Edge features optimised H alone: ", edge_features_opt_H)
 
         volume_opt_H = compute_volume(H_opt_xyz)                                                                        # Compute the volume encapsulated by the optimised hydrogen.
-
         print("Volume optimised H alone: ", volume_opt_H)
 
-        while True:
-            H_energy_input = input("Run 'calculate energy' in the DFT script as follows: "
-                                         "'energy_H, _ = calculate_energy(H_opt_xyz)', "
-                                         "where 'H_opt_xyz' is printed just above. "
-                                         "When this is done, type 'done': ")
-
-            if H_energy_input.lower() == 'done':  # Case insensitive check
-                try:
-                    energy_H = float(input("Input the energy of the optimised H alone: "))
-                    break  # Exit loop after getting a valid energy input
-                except ValueError:
-                    print("Invalid input! Please enter a numeric value for the energy.")
-            else:
-                print("Invalid response. Please type 'done' when ready.")
+        energy_H = calculate_energy(H_opt_xyz)
 
         adsorption_energy = energy_comb - (energy_H + energy_crystal)                                                   # Calculate adsorption energy.
-
         print("Calculated adsorption energy: ", adsorption_energy)
 
         ########## Assemble TRAINING Node & Edge features + Indices ###########
