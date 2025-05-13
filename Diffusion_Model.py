@@ -181,36 +181,38 @@ def run_training():
         The GNN full model parameters are then saved for use in testing later.
     """
 
-    root = tk.Tk()
-    root.withdraw()                                                                                                     # Hide the root window.
+    # root = tk.Tk()
+    # root.withdraw()                                                                                                     # Hide the root window.
 
-    file_path = filedialog.askopenfilename(title="Select CSV File", filetypes=[("CSV Files", "*.csv")])                 # Open file dialog to select training CSV file.
-    if not file_path:
-        print("No file selected. Exiting...")
-        return
+    # file_path = filedialog.askopenfilename(title="Select CSV File", filetypes=[("CSV Files", "*.csv")])                 # Open file dialog to select training CSV file.
+    # if not file_path:
+    #     print("No file selected. Exiting...")
+    #     return
+
+    file_path = "diffusion_training.csv"
 
     data = load_training_data(file_path)                                                                                # Load the diffusion data from the selected file.
     data["node_features"] = data["node_features"][:, 0:6]                                                               # Extract the first 7 features.
 
-    epochs = 100
+    epochs = 2000
 
     node_size = 6
-    node_hidden_size = 16
+    node_hidden_size = 2
     node_output_size = 1
 
     edge_size = 2
-    edge_hidden_size = 8
+    edge_hidden_size = 4
     edge_output_size = 1
 
-    hidden_size1 = 32
-    hidden_size2 = 64
+    hidden_size1 = 8
+    hidden_size2 = 8
     gnn_output_size = 3
 
     model = GNN(node_size, node_hidden_size, node_output_size,
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     loss_train_list = []
 
     loss_func = nn.MSELoss()
@@ -245,7 +247,7 @@ def run_training():
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend()
-    plt.title(f'Train and Test Losses')
+    plt.title(f'Train Loss')
     plt.show()
 
     hyperparameters = {

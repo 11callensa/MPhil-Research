@@ -99,8 +99,11 @@ def extract_compound(material_id, name):
         adsorption_temp = input("Input the compound's adsorption temperature in K (If in TESTING mode input 0): ")      # User inputs adsorption and desorption temperature.
         desorption_temp = input("Input the compound's desorption temperature in K (If in TESTING mode input 0: ")
 
+        coverage = float(input('Input the coverage of H2 molecules on the surface of the compound: '))
+
         print("Adsorption Temperature: ", adsorption_temp)
         print("Desorption Temperature: ", desorption_temp)
+        print("Coverage: ", coverage)
 
         extracted_input_features = [energy_above_hull]                                                                  # Store the energy above hull and temperatures.
         extracted_output_features = [adsorption_temp, desorption_temp]
@@ -165,7 +168,7 @@ def extract_compound(material_id, name):
     print("Extracted input features: ", extracted_input_features)
     print("Extracted output features: ", extracted_output_features)
 
-    return xyz_format, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features
+    return xyz_format, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features, coverage
 
 
 def manual_input():
@@ -306,3 +309,8 @@ def reassociate_coordinates(raw_optimised_xyz, combined_xyz):
         ]                                                                                                               # Format new coordinates with atom labels.
 
     return optimised_xyz
+
+
+def parsing(seq):
+    seen = set()
+    return [x for x in seq if not (x in seen or seen.add(x))]

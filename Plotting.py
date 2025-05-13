@@ -62,3 +62,77 @@ def plot_external_surfaces(external_faces):
     ax.set_title("External Surfaces of the Crystal")
 
     plt.show()
+
+
+def plot_adsorption_sites(layer_atoms, edge_indices, adsorption_sites_dict):
+    """
+    Plots the compound surface layer with identified adsorption sites.
+
+    Parameters:
+    - layer_atoms: list of strings like ['Ti x y z', ...]
+    - edge_indices: list of tuples of bonded atom indices
+    - adsorption_sites_dict: output from identify_adsorption_sites(...)
+    """
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Parse atom coordinates
+    coords = []
+    elements = []
+    for line in layer_atoms:
+        parts = line.split()
+        elements.append(parts[0])
+        coords.append(np.array(list(map(float, parts[1:]))))
+
+    coords = np.array(coords)
+
+    # Plot atoms
+    ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c='blue', label='Surface Atoms', s=50)
+
+    # Plot bonds
+    for i, j in edge_indices:
+        bond = np.array([coords[i], coords[j]])
+        ax.plot(bond[:, 0], bond[:, 1], bond[:, 2], color='gray', alpha=0.6)
+
+    # Plot adsorption sites
+    colors = {'top': 'green', 'bridge': 'orange', 'hollow': 'red'}
+    markers = {'top': 'o', 'bridge': '^', 'hollow': 's'}
+
+    for site_type, site_coords in adsorption_sites_dict.items():
+        site_coords = np.array(site_coords)
+        if len(site_coords) > 0:
+            ax.scatter(site_coords[:, 0], site_coords[:, 1], site_coords[:, 2],
+                       c=colors[site_type], marker=markers[site_type],
+                       label=f'{site_type.title()} Sites', s=80, edgecolor='k')
+
+    ax.legend()
+    ax.set_title("Adsorption Sites on Surface")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_adsorbed_atoms(atom_list, title="Surface + Adsorbed H₂"):
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+
+    xs, ys, zs = [], [], []
+    colors = []
+    for entry in atom_list:
+        element, x, y, z = entry.split()
+        xs.append(float(x))
+        ys.append(float(y))
+        zs.append(float(z))
+        colors.append('red' if element == 'H' else 'dodgerblue')
+
+    ax.scatter(xs, ys, zs, c=colors, s=60, edgecolor='k', depthshade=True)
+    ax.set_xlabel('X (Å)')
+    ax.set_ylabel('Y (Å)')
+    ax.set_zlabel('Z (Å)')
+    ax.set_title(title)
+    ax.set_box_aspect([1, 1, 0.3])
+    plt.tight_layout()
+    plt.show()

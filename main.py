@@ -1,7 +1,7 @@
 import csv
 
 from Compound_Database import set_train_materials
-from Training_Creator import data_creator
+from Training_Creator_New import data_creator
 import Diffusion_Model
 import Energy_Model
 import Temperature_Model
@@ -11,6 +11,8 @@ run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3
 # run_choice = '1'
 
 if run_choice == '1':
+
+    print('Pre train Materials')
 
     hydrogen, compound_ID_set = set_train_materials()                                                                   # Extract hydrogen and compounds.
     print("Materials set.")

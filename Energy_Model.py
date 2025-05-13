@@ -322,14 +322,14 @@ def data_preprocess(batch_size):
 
 def run_training():
 
-    batch_size = 3  # Adjust as needed
+    batch_size = 2  # Adjust as needed
 
     dataset = data_preprocess(batch_size)
 
     epochs = 200
 
     node_size = 7
-    node_hidden_size = 2
+    node_hidden_size = 8
     node_output_size = 1
 
     edge_size = 2
@@ -375,12 +375,17 @@ def run_training():
             optimizer.step()
 
             train_loss += loss.item()
-            loss_train_list.append(loss.item())  # Fix: Append individual loss, not accumulated loss
+
+        avg_loss = train_loss / len(dataset)
+        loss_train_list.append(avg_loss)
 
         if epoch % 10 == 0:
-            print(f"Epoch {epoch}/{epochs}, Loss: {train_loss / len(dataset)}")  # Fix: Average loss
+            print(f"Epoch {epoch}/{epochs}, Loss: {avg_loss}")
 
         # Fix: Plot loss after training, not during every epoch
+
+    print(len(loss_train_list))
+
     plt.figure()
     plt.plot(loss_train_list, label="Train Loss")
     plt.xlabel("Epochs")
@@ -390,4 +395,4 @@ def run_training():
     plt.show()
 
 
-run_training()
+# run_training()
