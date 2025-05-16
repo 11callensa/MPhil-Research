@@ -64,7 +64,9 @@ def extract_compound(material_id, name):
 
         try:
             elasticity_doc = m.materials.elasticity.search(material_ids=[material_id])[0]                               # Extract mechanical properties of the compound.
+            print('Inside elasticity doc.')
         except (IndexError, AttributeError, KeyError):
+            print('Inside exception.')
             elasticity_doc = None
 
         print(elasticity_doc)
@@ -75,7 +77,9 @@ def extract_compound(material_id, name):
         shear_reuss = None
         poisson_ratio = None
 
-        if elasticity_doc.bulk_modulus is not None:                                                                     # If there are mechanical properties, extract shear and bulk moduli and poisson's ratio
+
+        if elasticity_doc is not None:                                                                     # If there are mechanical properties, extract shear and bulk moduli and poisson's ratio
+            print('Inside elasticity doc bulk modulus.')
             bulk_voigt = elasticity_doc.bulk_modulus.voigt
             bulk_reuss = elasticity_doc.bulk_modulus.reuss
             shear_voigt = elasticity_doc.shear_modulus.voigt
@@ -97,13 +101,10 @@ def extract_compound(material_id, name):
         print("Poisson's Ratio: ", poisson_ratio)
 
         adsorption_temp = input("Input the compound's adsorption temperature in K (If in TESTING mode input 0): ")      # User inputs adsorption and desorption temperature.
-        desorption_temp = input("Input the compound's desorption temperature in K (If in TESTING mode input 0: ")
-
-        coverage = float(input('Input the coverage of H2 molecules on the surface of the compound: '))
+        desorption_temp = input("Input the compound's desorption temperature in K (If in TESTING mode input 0): ")
 
         print("Adsorption Temperature: ", adsorption_temp)
         print("Desorption Temperature: ", desorption_temp)
-        print("Coverage: ", coverage)
 
         extracted_input_features = [energy_above_hull]                                                                  # Store the energy above hull and temperatures.
         extracted_output_features = [adsorption_temp, desorption_temp]
@@ -168,7 +169,7 @@ def extract_compound(material_id, name):
     print("Extracted input features: ", extracted_input_features)
     print("Extracted output features: ", extracted_output_features)
 
-    return xyz_format, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features, coverage
+    return xyz_format, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features
 
 
 def manual_input():
@@ -314,3 +315,4 @@ def reassociate_coordinates(raw_optimised_xyz, combined_xyz):
 def parsing(seq):
     seen = set()
     return [x for x in seq if not (x in seen or seen.add(x))]
+

@@ -2,7 +2,7 @@ from collections import Counter
 
 from Materials_Extractor import extract_hydrogen, extract_compound, compute_bonds, parsing
 from Plotting import plot_crystal, plot_adsorption_sites, plot_adsorbed_atoms
-from Mol_Geometry import surface_finder, compute_volume, centre_coords, place_hydrogen, layer1_extractor, layer2_extractor, rotater, tiler, site_finder
+from Mol_Geometry import surface_finder, compute_volume, centre_coords, layer1_extractor, layer2_extractor, rotater, tiler, site_finder, coverage_atomsnm2_to_ML, place_hydrogen
 
 from Build_Connections import build_connections
 from External_Saving import save_edges_to_csv, save_original_xyz
@@ -15,11 +15,12 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     hydrogen_bond = extract_hydrogen(f"{hydrogen}.poscar")                                                              # Extract hydrogen and compound bond lengths and coordinates.
     print("Hydrogen Bond: ", hydrogen_bond)
 
-    compound_xyz, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features, coverage = \
+    compound_xyz, oxidation_states, extracted_input_features, extracted_output_features, uncertain_features = \
         (extract_compound(compound_ID, name))                                                                           # Extract coordinates, oxidation states, mechanical features, temperatures and features that could be used.
 
+    print("Uncertain features: ", uncertain_features)
     print("Compound XYZ: ", compound_xyz)
-    print("Uncertain TEST features: ", uncertain_features)
+    print('Num atoms in original cell: ', len(compound_xyz))
 
     ################## Setup crystal surface + underlayer ##################
 
@@ -42,7 +43,7 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     tiled_raw_xyz = tiler(rotated_xyz)
     tiled_xyz = parsing(tiled_raw_xyz)
-    tiled_xyz.sort(key=lambda x: x.split()[0], reverse=True)
+    # tiled_xyz.sort(key=lambda x: x.split()[0], reverse=True)
     print('Tiled XYZ: ', tiled_xyz)
 
     edge_indices_crystal = compute_bonds(tiled_xyz)                                                                  # Computer the crystal edge indices.
@@ -90,6 +91,24 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     print('Adsorption sites: ', adsorption_sites)
 
     plot_adsorption_sites(centered_xyz, edge_indices_crystal, adsorption_sites)
+
+    while True:
+        coverage_select = input(
+            "Select coverage input type:\n"
+            "1 - atoms per nm²\n"
+            "2 - monolayers (ML)\n"
+            "Enter 1 or 2: "
+        ).strip()
+
+        if coverage_select == '1':
+            atoms_nm2 = float(input("Enter coverage in atoms per nm²: "))
+            coverage = coverage_atomsnm2_to_ML(atoms_nm2, centered_xyz, adsorption_sites)
+            break
+        elif coverage_select == '2':
+            coverage = float(input("Enter coverage in ML: "))
+            break
+        else:
+            print("Invalid input. Please enter 1 or 2.")
 
     combined_xyz = place_hydrogen(centered_xyz, adsorption_sites, coverage, hydrogen_bond)
     num_H = len(combined_xyz) - num_atoms
@@ -167,9 +186,9 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     if test_train == '1':
 
-        optimised_xyz_raw, combined_energy = optimise_geometry(combined_xyz, num_atoms, name)
+        optimised_xyz_raw, energy_comb = optimise_geometry(combined_xyz, num_atoms, name)
         print('Raw optimised xyz: ', optimised_xyz_raw)
-        print('Combined energy: ', combined_energy)
+        print('Combined energy: ', energy_comb)
 
         optimised_xyz, optimised_centre = centre_coords(optimised_xyz_raw, num_atoms)                                     # Centre all atoms around the crystal's centroid.
 
@@ -259,3 +278,6 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
         return [node_features_test, edge_features_test, edge_indices, diffusion_inputs, diffusion_input_xyz,
                 energy_inputs_test, uncertain_features, num_atoms, num_H]
+
+    else:
+        return None

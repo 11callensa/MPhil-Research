@@ -91,110 +91,6 @@ def centre_coords(base_matrix, num_center):
     return centered_atom_list, center
 
 
-# def place_hydrogen(matrix, surfaces, bond_length, offset1, offset2):
-#     """
-#         Places hydrogen molecules around the compound surfaces, at a certain offset distance from the surfaces.
-#
-#         :param matrix: 3D coordinates of the compound.
-#         :param surfaces: Coordinates of the compound surfaces.
-#         :param bond_length: Bond length of H2.
-#         :param offset1: Surface offset distance 1.
-#         :param offset2: Surface offset distance 2.
-#         :return: 3D coordinates of the compound surrounded by H2 molecules.
-#     """
-#
-#     fig = plt.figure(figsize=(10, 10))                                                                                  # Setup a 3D figure.
-#     ax = fig.add_subplot(111, projection='3d')
-#
-#     all_points = np.vstack(surfaces)                                                                                    # Compute global centroid to determine outward direction.
-#     global_centroid = np.mean(all_points, axis=0)
-#
-#     for i, surface in enumerate(surfaces):
-#         surface = np.array(surface)                                                                                     # Extract the surface information.
-#         ax.add_collection3d(Poly3DCollection([surface], alpha=0.5, edgecolor='k'))
-#
-#         A, B, C = surface                                                                                               # Compute the edge lengths.
-#         edge1 = np.linalg.norm(A - B)
-#         edge2 = np.linalg.norm(B - C)
-#         edge3 = np.linalg.norm(C - A)
-#         avg_edge_length = (edge1 + edge2 + edge3) / 3
-#
-#         if avg_edge_length < bond_length:                                                                               # Skip molecule placement if avg edge length is smaller than bond length.
-#             continue
-#
-#         v1, v2 = B - A, C - A                                                                                           # Compute normal vector.
-#         normal = np.cross(v1, v2)
-#         normal = normal / np.linalg.norm(normal)
-#
-#         centroid = np.mean(surface, axis=0)                                                                             # Ensure normal points outward.
-#         if np.dot(normal, centroid - global_centroid) < 0:
-#             normal = -normal                                                                                            # Flip normal if pointing inward.
-#
-#         offset_distance = offset2 if i % 2 == 0 else offset1
-#
-#         P1 = centroid - normal * offset_distance                                                                        # Place the molecule's midpoint at the centroid of the surface.
-#         P2 = centroid + normal * offset_distance                                                                        # Molecule's center of gravity (midpoint of the bond) should be at centroid.
-#
-#         P1_offset, P2_offset = P1, P2                                                                                   # Ensure the correct bond length.
-#         current_bond_length = np.linalg.norm(P2_offset - P1_offset)                                                     # Make sure the distance between P1 and P2 is exactly the bond length.
-#
-#         if current_bond_length == 0:                                                                                    # Avoid division by zero.
-#             print(f"Warning: current_bond_length is zero between {P1_offset} and {P2_offset}")
-#             continue                                                                                                    # Skip this iteration if the bond length is zero.
-#
-#         scale_factor = bond_length / current_bond_length
-#         P2_offset = P1_offset + (P2_offset - P1_offset) * scale_factor
-#
-#         def is_within_surface(p, surface):                                                                              # Check if both atoms are within the surface's bounds.
-#             A, B, C = surface                                                                                           # Check if a point is within the triangle surface using barycentric coordinates.
-#             v0, v1, v2 = B - A, C - A, p - A                                                                            # Vectors from point to vertices.
-#             d00, d01, d11, d20, d21 = np.dot(v0, v0), np.dot(v0, v1), np.dot(v1, v1), np.dot(v0, v2), np.dot(v1, v2)
-#             denom = d00 * d11 - d01 * d01
-#             v = (d11 * d20 - d01 * d21) / denom
-#             w = (d00 * d21 - d01 * d20) / denom
-#             u = 1 - v - w
-#             return u >= 0 and v >= 0 and w >= 0
-#
-#         while not is_within_surface(P1_offset, surface) or not is_within_surface(P2_offset, surface):                   # Retry until both atoms are within the surface.
-#             P1 = centroid - normal * offset_distance                                                                    # If atoms are out of bounds, adjust position.
-#             P2 = centroid + normal * offset_distance
-#             P1_offset, P2_offset = P1, P2
-#             current_bond_length = np.linalg.norm(P2_offset - P1_offset)
-#
-#             if current_bond_length == 0:                                                                                # Avoid division by zero.
-#                 print(f"Warning: current_bond_length is zero between {P1_offset} and {P2_offset}")
-#                 continue                                                                                                # Skip this iteration if the bond length is zero.
-#
-#             scale_factor = bond_length / current_bond_length
-#             P2_offset = P1_offset + (P2_offset - P1_offset) * scale_factor
-#
-#         tangent = np.cross(normal, v1)                                                                                  # Compute a direction parallel to the surface (tangent direction).
-#         if np.linalg.norm(tangent) == 0:
-#             tangent = np.cross(normal, v2)                                                                              # If the first cross product is zero, use the other edge.
-#         tangent = tangent / np.linalg.norm(tangent) * bond_length                                                       # Scale to bond length.
-#
-#         P1_offset = centroid - tangent / 2 + normal * offset_distance / 2                                               # Apply offset distance to ensure molecules are outside the surface.
-#         P2_offset = centroid + tangent / 2 + normal * offset_distance / 2
-#
-#         ax.scatter(*P1_offset, color='r', s=50)                                                                         # Plot points and lines.
-#         ax.scatter(*P2_offset, color='b', s=50)
-#         ax.add_collection3d(Line3DCollection([[P1_offset, P2_offset]], colors='black', linewidths=2))
-#
-#         matrix.append(f'H {P1_offset[0]:.10f} {P1_offset[1]:.10f} {P1_offset[2]:.10f}')
-#         matrix.append(f'H {P2_offset[0]:.10f} {P2_offset[1]:.10f} {P2_offset[2]:.10f}')
-#
-#     ax.set_xticks(np.arange(int(np.min(all_points[:, 0])) - 2, int(np.max(all_points[:, 0])) + 2, 2))
-#     ax.set_yticks(np.arange(int(np.min(all_points[:, 1])) - 2, int(np.max(all_points[:, 1])) + 2, 2))
-#     ax.set_zticks(np.arange(int(np.min(all_points[:, 2])) - 2, int(np.max(all_points[:, 2])) + 2, 2))
-#
-#     ax.set_xlabel('X')
-#     ax.set_ylabel('Y')
-#     ax.set_zlabel('Z')
-#     plt.show()
-#
-#     return matrix
-
-
 def layer1_extractor(compound_xyz, surface_points, miller_index, tolerance=0.1):
     """
     Returns atoms on the outermost surface layer that is parallel to a Miller-index-defined plane.
@@ -386,6 +282,8 @@ def tiler(atoms_list):
         for el, (x, y, z) in zip(elements, shifted_coords):
             tiled_atoms.append(f"{el} {x:.6f} {y:.6f} {z:.6f}")
 
+    tiled_atoms.sort(key=lambda atom: atom.split()[0])
+
     return tiled_atoms
 
 
@@ -442,6 +340,33 @@ def site_finder(layer_atoms, min_bond=1.0, max_bond=3.0, z_tol=1e-3):
         'bridge': bridge_sites,
         'hollow': hollow_sites
     }
+
+
+def coverage_atomsnm2_to_ML(coverage_atoms_per_nm2, tiled_xyz, adsorption_sites):
+    """
+    Convert coverage from atoms/nm² to monolayer (ML).
+
+    Args:
+        coverage_atoms_per_nm2: float, input coverage
+        tiled_xyz: list of strings with 'Element x y z'
+        adsorption_sites: dict with lists of adsorption sites (e.g. 'top', 'bridge', 'hollow')
+
+    Returns:
+        coverage in ML units (float)
+    """
+    # Count number of adsorption sites (you can choose top only or all combined)
+    total_sites = len(adsorption_sites['top']) + len(adsorption_sites['bridge']) + len(adsorption_sites['hollow'])
+
+    # Get surface area from xy spread
+    coords = np.array([list(map(float, line.split()[1:4])) for line in tiled_xyz])
+    min_x, max_x = coords[:, 0].min(), coords[:, 0].max()
+    min_y, max_y = coords[:, 1].min(), coords[:, 1].max()
+    area_nm2 = (max_x - min_x) * (max_y - min_y) * 1e-2  # Å² → nm²
+
+    site_density = total_sites / area_nm2  # sites per nm²
+
+    coverage_ML = coverage_atoms_per_nm2 / site_density
+    return coverage_ML
 
 
 def place_hydrogen(tiled_xyz, adsorption_sites, coverage, hydrogen_bond, height_above=6.0, min_distance=3.0):

@@ -2,9 +2,9 @@ import csv
 
 from Compound_Database import set_train_materials
 from Training_Creator_New import data_creator
-import Diffusion_Model
-import Energy_Model
-import Temperature_Model
+# import Diffusion_Model
+# import Energy_Model
+# import Temperature_Model
 
 run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3) Test on a preloaded model mode: ")
 
@@ -86,7 +86,7 @@ if run_choice == '1':
                                      str(temp_input_features), str(temp_output_features), str(uncertain_features),
                                      str(num_fixed), str(num_H)])
 
-                print(f"Saved temperature training data for {compound} to {temperature_filename} CSV.")
+                print(f"Saved temperature training data for {compound} to {temperature_filename}.")
 
             except Exception as e:
                 print(f"Error processing {compound}: {e}")
@@ -165,11 +165,11 @@ elif run_choice == '2':
         Diffusion_Model.run_training()
     elif model_choice == '2':
         Energy_Model.data_preprocess()
-    elif model_choice == '3':
-        Temperature_Model.run_training()
-    #
-    # else:
-    #     pass
+    # elif model_choice == '3':
+    #     Temperature_Model.run_training()
+
+    else:
+        pass
 
 
 elif run_choice == '3':
@@ -177,8 +177,8 @@ elif run_choice == '3':
     model_choice = input("Which type of model do you want to test with? 1) Optimisation Model, 2) Energy Model or "
                          "3) Temperature Model")
 
-    if model_choice == '1':
-        Diffusion_Model.run_testing()
+    # if model_choice == '1':
+    #     Diffusion_Model.run_testing()
     # elif model_choice == '2':
     #
     # elif model_choice == '3':
