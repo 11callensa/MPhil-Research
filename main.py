@@ -73,7 +73,7 @@ if run_choice == '1':
 
                 with open(energy_filename, mode='a', newline='') as file1:                                              # Append mode.
                     writer = csv.writer(file1)
-                    writer.writerow([f'{compound}', str([node_features[1], node_features[2], node_features[4]]),
+                    writer.writerow([f'[{compound}-H, {compound}, H-({compound})]', str([node_features[1], node_features[2], node_features[4]]),
                                      str([edge_features[1], edge_features[2], edge_features[4]]),
                                      str(edge_indices), str(energy_input_features), str(energy_output_features),
                                      str(uncertain_features), str(num_fixed), str(num_H)])
