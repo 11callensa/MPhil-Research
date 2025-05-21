@@ -250,7 +250,20 @@ def rotater(xyz):
     return rotated_coords
 
 
-def tiler(atoms_list):
+import numpy as np
+
+def tiler(atoms_list, mode='2x2'):
+    """
+    Tiles the atomic coordinates in either a 2x2 or 3x1 pattern.
+
+    Parameters:
+    - atoms_list: List of strings with format "Element x y z"
+    - mode: '2x2' for a 2x2 tiling or '3x1' for a linear 3x1 tiling along x
+
+    Returns:
+    - tiled_atoms: List of strings in same format, tiled accordingly
+    """
+
     # Parse atomic entries into element list and position array
     elements = []
     coords = []
@@ -267,13 +280,24 @@ def tiler(atoms_list):
     dx = max_coords[0] - min_coords[0]
     dy = max_coords[1] - min_coords[1]
 
-    # Tiling offsets for 2x2 layout: [1] [2], [3] [4]
-    shift_vectors = [
-        np.array([0, 0, 0]),         # [1]
-        np.array([dx, 0, 0]),        # [2]
-        np.array([0, dy, 0]),        # [3]
-        np.array([dx, dy, 0])        # [4]
-    ]
+    mode = input('Would you like to tile in the form 1) 3x1 or 2) 2x2?: ')
+
+    # Define shift vectors based on mode
+    if mode == '2x2':
+        shift_vectors = [
+            np.array([0, 0, 0]),         # [1]
+            np.array([dx, 0, 0]),        # [2]
+            np.array([0, dy, 0]),        # [3]
+            np.array([dx, dy, 0])        # [4]
+        ]
+    elif mode == '3x1':
+        shift_vectors = [
+            np.array([0, 0, 0]),         # [1]
+            np.array([dx, 0, 0]),        # [2]
+            np.array([2 * dx, 0, 0])     # [3]
+        ]
+    else:
+        raise ValueError("Invalid mode. Choose '2x2' or '3x1'.")
 
     # Generate tiled atoms
     tiled_atoms = []
@@ -282,6 +306,7 @@ def tiler(atoms_list):
         for el, (x, y, z) in zip(elements, shifted_coords):
             tiled_atoms.append(f"{el} {x:.6f} {y:.6f} {z:.6f}")
 
+    # Optional: sort by element
     tiled_atoms.sort(key=lambda atom: atom.split()[0])
 
     return tiled_atoms
@@ -445,4 +470,3 @@ def place_hydrogen(tiled_xyz, adsorption_sites, coverage, hydrogen_bond, height_
         print(f"⚠️ Only placed {placed} H₂ molecules due to spacing constraint.")
 
     return new_structure
-

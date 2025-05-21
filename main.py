@@ -31,7 +31,7 @@ if run_choice == '1':
                                   'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
                                   'Diffusion Output Coords', 'Uncertain Features', 'Num. Fixed Atoms',
                                   'Num. Placed H Atoms']),
-            (energy_filename, ['Compound', 'Node Features (Triple)', 'Edge Features (Triple)',
+            (energy_filename, ['Compounds', 'Node Features (Triple)', 'Edge Features (Triple)',
                                'Edge Indices (Triple)', 'Energy Input Features (Triple)',
                                'Energy Output Features (Triple)', 'Uncertain Features', 'Num. Fixed Atoms',
                                'Num. Placed H Atoms']),
@@ -93,8 +93,8 @@ if run_choice == '1':
 
     elif test_train_choice == '2':
 
-        diffusion_test_filename = 'diffusion_testing.csv'
-        energy_test_filename = 'energy_testing.csv'
+        diffusion_test_filename = f'{compound}_diffusion_testing.csv'
+        energy_test_filename = f'{compound}_energy_testing.csv'
         temperature_test_filename = 'temperature_testing.csv'
 
         file_data = [(diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',

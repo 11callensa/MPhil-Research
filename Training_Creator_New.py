@@ -186,9 +186,8 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     if test_train == '1':
 
-        optimised_xyz_raw, energy_comb = optimise_geometry(combined_xyz, num_atoms, name)
+        optimised_xyz_raw = optimise_geometry(combined_xyz, num_atoms, name)
         print('Raw optimised xyz: ', optimised_xyz_raw)
-        print('Combined energy: ', energy_comb)
 
         optimised_xyz, optimised_centre = centre_coords(optimised_xyz_raw, num_atoms)                                     # Centre all atoms around the crystal's centroid.
 
@@ -196,6 +195,9 @@ def data_creator(hydrogen, compound_ID, name, test_train):
         print("Optimised centre: ", optimised_centre)
 
         plot_crystal(optimised_xyz, edge_indices_comb)                                                                  # Plot optimised system.
+
+        energy_comb = calculate_energy(optimised_xyz)
+        print('Combined energy: ', energy_comb)
 
         #################### Optimised combined Code #################
 
@@ -210,7 +212,7 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
         #################### Optimised H alone Code ##################
 
-        H_opt_xyz = combined_xyz[num_atoms:]                                                                            # Extract the optimised hydrogen positions.
+        H_opt_xyz = optimised_xyz[num_atoms:]                                                                            # Extract the optimised hydrogen positions.
 
         print("H Opt XYZ: ", H_opt_xyz)
 
