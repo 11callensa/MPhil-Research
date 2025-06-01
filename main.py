@@ -1,8 +1,8 @@
 import csv
 
-from Compound_Database import set_train_materials
+from Compound_Database import set_train_materials, set_test_materials
 from Training_Creator_New import data_creator
-# import Diffusion_Model
+import Diffusion_Model
 # import Energy_Model
 # import Temperature_Model
 
@@ -14,12 +14,12 @@ if run_choice == '1':
 
     print('Pre train Materials')
 
-    hydrogen, compound_ID_set = set_train_materials()                                                                   # Extract hydrogen and compounds.
-    print("Materials set.")
-
     test_train_choice = input("Do you want to extract features for 1) Training or 2) Testing?: ")                       # Training data creation or testing data creation.
 
     if test_train_choice == '1':
+
+        hydrogen, compound_ID_set = set_train_materials()  # Extract hydrogen and compounds.
+        print("Materials set.")
 
         diffusion_filename = 'diffusion_training.csv'                                                                   # Define the training data file names (For 3 models).
         energy_filename = 'energy_training.csv'
@@ -93,32 +93,35 @@ if run_choice == '1':
 
     elif test_train_choice == '2':
 
-        diffusion_test_filename = f'{compound}_diffusion_testing.csv'
-        energy_test_filename = f'{compound}_energy_testing.csv'
-        temperature_test_filename = 'temperature_testing.csv'
+        hydrogen, compound_ID_set = set_test_materials()  # Extract hydrogen and compounds.
+        print("Materials set.")
 
-        file_data = [(diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
-                                 'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
-                                 'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms']),
-                     (energy_test_filename, ['Compound', 'Node Features (Triple)', 'Edge Features (Triple)', 'Edge Indices (Triple)',
-                                             'Energy Input Features (Triple)', 'Uncertain Features', 'Num. Fixed Atoms',
-                                             'Num. Placed H Atoms']),
-                     (temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
-                                                  'Edge Features Optimised Combined', 'Edge Indices Combined',
-                                                  'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
+        for compound in compound_ID_set:                                                                                # Loop through each of the compounds to extract data.
+            compound_ID = compound_ID_set[compound]
 
-        for filename, header in file_data:
-            try:                                                                                                        # Try creating the file in exclusive ('x') mode.
-                with open(filename, mode='x', newline='') as file:
-                    writer = csv.writer(file)
-                    writer.writerow(header)                                                                             # Write the header if the file is new.
-                    print(f"{filename} setup complete (new file created).")
+            diffusion_test_filename = f'{compound}_diffusion_testing.csv'
+            energy_test_filename = f'{compound}_energy_testing.csv'
+            temperature_test_filename = 'temperature_testing.csv'
 
-            except FileExistsError:
-                print(f"File '{filename}' already exists. Appended new row.")
+            file_data = [(diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
+                                     'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
+                                     'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms']),
+                         (energy_test_filename, ['Compound', 'Node Features (Triple)', 'Edge Features (Triple)', 'Edge Indices (Triple)',
+                                                 'Energy Input Features (Triple)', 'Uncertain Features', 'Num. Fixed Atoms',
+                                                 'Num. Placed H Atoms']),
+                         (temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
+                                                      'Edge Features Optimised Combined', 'Edge Indices Combined',
+                                                      'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
 
-        for compound in compound_ID_set:
-            compound_ID = compound_ID_set[compound][0]                                                                  # Loop through each of the compounds to extract data.
+            for filename, header in file_data:
+                try:                                                                                                    # Try creating the file in exclusive ('x') mode.
+                    with open(filename, mode='x', newline='') as file:
+                        writer = csv.writer(file)
+                        writer.writerow(header)                                                                         # Write the header if the file is new.
+                        print(f"{filename} setup complete (new file created).")
+
+                except FileExistsError:
+                    print(f"File '{filename}' already exists. Appended new row.")
 
             try:
                 print(f"Processing Compound: {compound}")
@@ -163,8 +166,8 @@ elif run_choice == '2':
 
     if model_choice == '1':
         Diffusion_Model.run_training()
-    elif model_choice == '2':
-        Energy_Model.data_preprocess()
+    # elif model_choice == '2':
+    #     Energy_Model.data_preprocess()
     # elif model_choice == '3':
     #     Temperature_Model.run_training()
 
@@ -177,8 +180,8 @@ elif run_choice == '3':
     model_choice = input("Which type of model do you want to test with? 1) Optimisation Model, 2) Energy Model or "
                          "3) Temperature Model")
 
-    # if model_choice == '1':
-    #     Diffusion_Model.run_testing()
+    if model_choice == '1':
+        Diffusion_Model.run_testing()
     # elif model_choice == '2':
     #
     # elif model_choice == '3':
