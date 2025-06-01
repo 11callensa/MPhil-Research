@@ -277,10 +277,10 @@ def data_creator(hydrogen, compound_ID, name, test_train):
                 energy_inputs_train, energy_outputs, temperature_inputs, temperature_outputs, uncertain_features,
                 num_atoms, num_H]
 
-    elif test_train == '0':
+    elif test_train == '2':
 
         return [node_features_test, edge_features_test, edge_indices, diffusion_inputs, diffusion_input_xyz,
-                energy_inputs_test, uncertain_features, num_atoms, num_H]
+                energy_inputs_test, uncertain_features, num_atoms, num_H, oxidation_states]
 
     else:
         return None

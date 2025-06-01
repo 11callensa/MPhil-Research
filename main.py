@@ -106,9 +106,9 @@ if run_choice == '1':
             file_data = [(diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
                                      'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
                                      'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms']),
-                         (energy_test_filename, ['Compound', 'Node Features (Triple)', 'Edge Features (Triple)', 'Edge Indices (Triple)',
-                                                 'Energy Input Features (Triple)', 'Uncertain Features', 'Num. Fixed Atoms',
-                                                 'Num. Placed H Atoms']),
+                         (energy_test_filename, ['Compound', 'Node Features', 'Edge Features', 'Edge Indices',
+                                                 'Energy Input Features', 'Uncertain Features', 'Num. Fixed Atoms',
+                                                 'Num. Placed H Atoms', 'Oxidation States']),
                          (temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
                                                       'Edge Features Optimised Combined', 'Edge Indices Combined',
                                                       'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
@@ -129,22 +129,22 @@ if run_choice == '1':
                 testing_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)                     # Run data creator in test mode.
 
                 (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
-                 energy_input_features, uncertain_features, num_fixed, num_H) = testing_features                        # Extract every aspect of testing data that will be saved.
+                 energy_input_features, uncertain_features, num_fixed, num_H, oxidation_states) = testing_features                        # Extract every aspect of testing data that will be saved.
 
                 with open(diffusion_test_filename, mode='a', newline='') as file:                                       # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str(node_features[0]), str(edge_features[0]), str(edge_indices[0]),
                          str(diffusion_input_features), str(diffusion_init_coords), str(uncertain_features),
-                         str(num_fixed), str(num_H)])
+                         str(num_fixed), str(num_H), str(oxidation_states)])
 
                 print(f"Saved diffusion testing data for {compound} to CSV.")
 
                 with open(energy_test_filename, mode='a', newline='') as file:                                          # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
-                        [f'{compound}', str(node_features), str(edge_features), str(edge_indices),
-                         str(energy_input_features), str(uncertain_features), str(num_fixed), str(num_H)])
+                        [f'{compound}', str(0), str(0), str(edge_indices[0]), str(energy_input_features),
+                         str(uncertain_features), str(num_fixed), str(num_H)])
 
                 print(f"Saved energy testing data for {compound} CRYSTAL ALONE to CSV.")
 
