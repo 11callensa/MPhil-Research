@@ -43,7 +43,7 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     tiled_raw_xyz = tiler(rotated_xyz)
     tiled_xyz = parsing(tiled_raw_xyz)
-    # tiled_xyz.sort(key=lambda x: x.split()[0], reverse=True)
+    tiled_xyz.sort(key=lambda x: x.split()[0], reverse=True)
     print('Tiled XYZ: ', tiled_xyz)
 
     edge_indices_crystal = compute_bonds(tiled_xyz)                                                                  # Computer the crystal edge indices.
@@ -222,7 +222,8 @@ def data_creator(hydrogen, compound_ID, name, test_train):
         print("Node features optimised H alone: ", node_features_opt_H)
         print("Edge features optimised H alone: ", edge_features_opt_H)
 
-        volume_opt_H = compute_volume(H_opt_xyz)                                                                        # Compute the volume encapsulated by the optimised hydrogen.
+        volume_opt_H = compute_volume(H_opt_xyz)
+        # volume_opt_H = 0
         print("Volume optimised H alone: ", volume_opt_H)
 
         energy_crystal = calculate_energy(centered_xyz)
