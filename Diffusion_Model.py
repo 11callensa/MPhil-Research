@@ -1,5 +1,6 @@
 import ast
 import os
+import csv
 import random
 import time
 import numpy as np
@@ -13,10 +14,10 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
 
 import matplotlib.pyplot as plt
-import tkinter as tk
-from tkinter import filedialog, simpledialog
+from tkinter import filedialog
 
-#
+from Compound_Properties import node_edge_features
+
 # if torch.cuda.is_available():
 #     device = torch.device("cuda")
 # elif torch.backends.mps.is_available():
@@ -242,19 +243,20 @@ def load_testing_data(csv_path):
     df = pd.read_csv(csv_path)
 
     def parse_column(col_name):
-        num_rows = len(df)
-        all_graphs = []
-
-        for i in range(num_rows):
-            value = df[col_name].iloc[i]
+        all_values = []
+        for i, value in enumerate(df[col_name]):
             try:
-                parsed_value = ast.literal_eval(value)  # Parses the string as list
-                all_graphs.append(parsed_value)  # One entry per graph
+                if isinstance(value, str):
+                    # Replace smart quotes with normal quotes
+                    cleaned = value.replace("‘", "'").replace("’", "'").replace("“", '"').replace("”", '"')
+                    parsed_value = ast.literal_eval(cleaned)
+                else:
+                    parsed_value = value
+                all_values.append(parsed_value)
             except (ValueError, SyntaxError) as e:
                 print(f"Error parsing {col_name} in row {i}: {e}")
                 return None
-
-        return all_graphs  # List of [graph_1_data, graph_2_data, ...]
+        return all_values
 
     system_names = df[df.columns[0]].tolist()  # First column
 
@@ -263,8 +265,9 @@ def load_testing_data(csv_path):
     edge_indices = parse_column('Edge Indices Combined')
     system_features = parse_column('Diffusion Input Features')
     initial_coords = parse_column('Diffusion Initial Coords')
+    oxidation_states = parse_column('Oxidation States')
 
-    num_fixed_atoms = df.iloc[:, 10].astype(int).tolist()
+    num_fixed_atoms = df.iloc[:, 8].astype(int).tolist()
 
     return {
         "system_names": system_names,
@@ -274,6 +277,7 @@ def load_testing_data(csv_path):
         "system_features": system_features,
         "initial_coords": initial_coords,
         "num_fixed_atoms": num_fixed_atoms,
+        'oxidation_states':oxidation_states
     }
 
 
@@ -496,6 +500,7 @@ def run_training():
 
                 start_idx = 0
                 movable_mask_global = torch.zeros(batch.y.size(0), dtype=torch.bool, device=batch.y.device)
+
                 for i, elements in enumerate(batch_elements):
                     N_fixed = batch_num_fixed[i].item()
                     num_atoms = len(elements)
@@ -595,10 +600,7 @@ def run_training():
             "output_gnn_dim": gnn_output_size
         }                                                                                                               # Store the hyperparameters in a dictionary for saving.
 
-        root = tk.Tk()                                                                                                  # Request user input for model name.
-        root.withdraw()                                                                                                 # Hide the root window.
-
-        model_name = simpledialog.askstring("Input", "Enter the model name:")
+        model_name = input('Input the model name: ')
         if not model_name:
             print("No model name entered. Exiting...")
             exit()
@@ -633,7 +635,7 @@ def run_testing():
     #     return
 
     train_file_path = "diffusion_training.csv"
-    train_data = load_testing_data(train_file_path)
+    train_data = load_training_data(train_file_path)
 
     train_data['displacements'] = []
     for i in range(len(train_data['output_coords'])):
@@ -671,17 +673,19 @@ def run_testing():
     output_coord_normaliser.fit(flat_coords_train, len(flat_output_coords_train[0]))
     disp_normaliser.fit(flat_disps_train, len(flat_disps_train[0]))
 
-    test_file_path = "NiO_diffusion_testing.csv"
+    test_file_path = "Diffusion Testing Data/NiO_diffusion_testing.csv"
     test_data = load_testing_data(test_file_path)
+
+    element_lists = [[line.split()[0] for line in group] for group in test_data['initial_coords']]
+
+    for i in range(len(test_data['initial_coords'])):
+        test_data['initial_coords'][i] = [[float(x) for x in line.split()[1:]] for line in test_data['initial_coords'][i]]
 
     test_indices = list(range(len(test_data['node_features'])))
 
     test_node_feats = extract_by_indices(test_data, 'node_features', test_indices)
     test_edge_feats = extract_by_indices(test_data, 'edge_features', test_indices)
     test_coords = extract_by_indices(test_data, 'initial_coords', test_indices)
-
-    def extract_by_indices(data_dict, key, indices):
-        return [data_dict[key][i] for i in indices]
 
     flat_nodes_test, test_node_sizes = flatten_graph_data(test_node_feats)
     flat_edges_test, test_edge_sizes = flatten_graph_data(test_edge_feats)
@@ -696,8 +700,6 @@ def run_testing():
     initial_coords_norm = split_back(initial_coords_norm_flat, test_coord_sizes)
 
     edge_indices = [torch.tensor(ei, dtype=torch.long).T.to(device) for ei in test_data['edge_indices']]
-
-    element_lists = [[line.split()[0] for line in group] for group in test_data['initial_coords']]
 
     graph_list = []
     for i in range(len(node_features_norm)):
@@ -716,7 +718,7 @@ def run_testing():
 
     test_loader = DataLoader(test_graphs, 1, shuffle=False)
 
-    print("\nTest systems:")
+    print("\nTest system:")
     for g in test_graphs:
         print(" -", g.system_name)
 
@@ -746,10 +748,10 @@ def run_testing():
         output_gnn_dim=hyperparameters["output_gnn_dim"]
     )
 
+    model.to(device)
+
     model.load_state_dict(model_data["model_state_dict"])                                                               # Load the state_dict (weights).
     model.eval()                                                                                                        # Set the model to evaluation mode.
-
-    input()
 
     all_predicted_coords = []
     all_elements = []
@@ -759,12 +761,19 @@ def run_testing():
         for batch in test_loader:
             batch = batch.to(device)
             batch_elements = batch.elements
-            batch_num_fixed = batch.num_fixed.to(device)
+            batch_num_fixed = batch.num_fixed
+
+            start_time = time.time()
 
             predicted_disp = model(batch.x, batch.edge_index, batch.edge_attr)
 
+            end_time = time.time()
+
+            print('Prediction time: ', end_time - start_time)
+
             start_idx = 0
-            movable_mask_global = torch.zeros(batch.y.size(0), dtype=torch.bool, device=batch.y.device)
+            movable_mask_global = torch.zeros(batch.input_coords.size(0), dtype=torch.bool, device=device)
+
             for i, elements in enumerate(batch_elements):
                 N_fixed = batch_num_fixed[i].item()
                 num_atoms = len(elements)
@@ -773,14 +782,11 @@ def run_testing():
                 movable_mask = torch.tensor(
                     [e == 'H' and idx >= N_fixed for idx, e in enumerate(elements)],
                     dtype=torch.bool,
-                    device=batch.y.device
+                    device=device
                 )
 
                 movable_mask_global[start_idx:end_idx].copy_(movable_mask)
                 start_idx = end_idx
-
-            # pred_movable = predicted_disp[movable_mask_global]
-            # true_movable = batch.y[movable_mask_global]
 
             initial_coords_norm = batch.input_coords.clone()
             initial_coords = coord_normaliser.inverse_process(initial_coords_norm.cpu().numpy())
@@ -813,13 +819,44 @@ def run_testing():
 
                 start_idx = end_idx
 
+    predicted_xyz = []
+
     for i, (name, elements, coords) in enumerate(zip(all_names, all_elements, all_predicted_coords)):
-        filename = f"Predicted Coords/{name}_predicted.xyz"
+        filename = f"Predicted Coords TESTING/{name}_predicted.xyz"
+
+        xyz_string = f"{len(elements)}\n"
+        xyz_string += "0 1\n"
+
+        for elem, coord in zip(elements, coords):
+            xyz_string += f"{elem} {coord[0]:.6f} {coord[1]:.6f} {coord[2]:.6f}\n"
+            xyz_line = f"{elem} {coord[0]:.6f} {coord[1]:.6f} {coord[2]:.6f}"
+            predicted_xyz.append(xyz_line)
+
         with open(filename, "w") as f:
-            f.write(f"{len(elements)}\n")
-            f.write("0 1\n")
-            for elem, coord in zip(elements, coords):
-                f.write(f"{elem} {coord[0]:.6f} {coord[1]:.6f} {coord[2]:.6f}\n")
+            f.write(xyz_string)
+
+    print("Predicted Optimised XYZ: ", predicted_xyz)
+    print('\n Creating Energy and Temperature Testing Files...')
+
+    node_features_opt_pred_comb, edge_features_opt_pred_comb = node_edge_features(predicted_xyz, test_data['edge_indices'][0],
+                                                                          test_data['oxidation_states'],
+                                                                          test_data['num_fixed_atoms'][0], 0)
+
+    print('Predicted Optimised Node Features: ', node_features_opt_pred_comb)
+    print('Predicted Optimised Edge Features: ', edge_features_opt_pred_comb)
+
+    energy_file_path = "Energy Testing Data/NiO_energy_testing.csv"
+
+    with open(energy_file_path, mode='r', newline='') as file:
+        reader = list(csv.reader(file))
+
+        for i, row in enumerate(reader[1:], start=1):
+            row[1] = str(node_features_opt_pred_comb)
+            row[2] = str(edge_features_opt_pred_comb)
+
+        with open(energy_file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerows(reader)
 
 # run_training()
-# run_testing()
+run_testing()

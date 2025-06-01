@@ -101,21 +101,21 @@ if run_choice == '1':
 
             diffusion_test_filename = f'{compound}_diffusion_testing.csv'
             energy_test_filename = f'{compound}_energy_testing.csv'
-            temperature_test_filename = 'temperature_testing.csv'
+            temperature_test_filename = f'{compound}_temperature_testing.csv'
 
-            file_data = [(diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
+            file_data = [('Diffusion Testing Data', diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
                                      'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
                                      'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms']),
-                         (energy_test_filename, ['Compound', 'Node Features', 'Edge Features', 'Edge Indices',
+                         ('Energy Testing Data', energy_test_filename, ['Compound', 'Node Features', 'Edge Features', 'Edge Indices',
                                                  'Energy Input Features', 'Uncertain Features', 'Num. Fixed Atoms',
                                                  'Num. Placed H Atoms', 'Oxidation States']),
-                         (temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
+                         ('Temperature Testing Data', temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
                                                       'Edge Features Optimised Combined', 'Edge Indices Combined',
                                                       'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
 
-            for filename, header in file_data:
+            for folder, filename, header in file_data:
                 try:                                                                                                    # Try creating the file in exclusive ('x') mode.
-                    with open(filename, mode='x', newline='') as file:
+                    with open(f'{folder}/{filename}', mode='x', newline='') as file:
                         writer = csv.writer(file)
                         writer.writerow(header)                                                                         # Write the header if the file is new.
                         print(f"{filename} setup complete (new file created).")
@@ -131,7 +131,7 @@ if run_choice == '1':
                 (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
                  energy_input_features, uncertain_features, num_fixed, num_H, oxidation_states) = testing_features                        # Extract every aspect of testing data that will be saved.
 
-                with open(diffusion_test_filename, mode='a', newline='') as file:                                       # Append mode.
+                with open(f'Diffusion Testing Data/{diffusion_test_filename}', mode='a', newline='') as file:                                       # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str(node_features[0]), str(edge_features[0]), str(edge_indices[0]),
@@ -140,7 +140,7 @@ if run_choice == '1':
 
                 print(f"Saved diffusion testing data for {compound} to CSV.")
 
-                with open(energy_test_filename, mode='a', newline='') as file:                                          # Append mode.
+                with open(f'Energy Testing Data/{energy_test_filename}', mode='a', newline='') as file:                                          # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str(0), str(0), str(edge_indices[0]), str(energy_input_features),
@@ -148,7 +148,7 @@ if run_choice == '1':
 
                 print(f"Saved energy testing data for {compound} CRYSTAL ALONE to CSV.")
 
-                with open(temperature_test_filename, mode='a', newline='') as file:                                     # Append mode.
+                with open(f'Temperature Testing Data/{temperature_test_filename}', mode='a', newline='') as file:                                     # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', '' , '', str(edge_indices[0]), '', str(uncertain_features), str(num_fixed), str(num_H)])
