@@ -16,38 +16,37 @@ def set_train_materials():
 
     hydrogen = 'H2'
 
-    # compound_test = {'LiH-Trial': 'mp-23703'}
+    # DONE compound = {'TiO2-A': 'mp-390'}
+    # DONE compound = {'TiO2-R': 'mp-1041565'}
 
-    # compound = {'TiO2-A': 'mp-390'}
-    compound = {'TiO2-R': 'mp-1041565'}
-                # 'Pt': 'mp-126',
-                # 'Ni': 'mp-23',
+    # compound = {'Pt': 'mp-126'}
+    compound = {'Ni': 'mp-23'}
                 # 'Pd': 'mp-2',
-                # 'MgO': 'mp-1265',
-                # 'Al2O3': 'mp-1143',
+    # DONE compound = {'MgO': 'mp-1265'}
+    # DONE compound = {'Al2O3': 'mp-1143'}
                 # 'LaCrO3': 'mp-19281',
-                # 'GaN': 'mp-804',
-                # 'WC': 'mp-1894',
-                # 'TiC': 'mp-631',
-                # 'CoO': 'mp-22408',
-                # 'ZnO': 'mp-2133',
-                # 'ZrO2': 'mp-2858',
+    # DONE compound = {'GaN': 'mp-830'}
+    # compound = {'WC': 'mp-1894'}
+    # DONE compound = {'TiC': 'mp-631'}
+    # compound = {'Co2O4': 'mp-18748'}
+    # DONE compound = {'ZnO': 'mp-1986'}
+    # compound = {'ZrO2': 'mp-2858'}
                 # 'Y2O3': 'mp-2652',
                 # 'Cr2O3': 'mp-19399',
                 # 'W': 'mp-91',
                 # 'CuCrO4': 'mp-504927',
-                # 'Au': 'mp-81',
-                # 'Cu': 'mp-30',
+    # compound = {'Au': 'mp-81'}
+    # DONE compound = {'Cu': 'mp-30'}
                 # 'Ag': 'mp-8566',
-                # 'SiC': 'mp-1204356',
+    # DONE compound = {'SiC':'mp-7631'}
                 # 'Ru': 'mp-33',
                 # 'Ir': 'mp-101',
                 # 'Rh': 'mp-74',
-                # 'Al': 'mp-134',
+    # DONE compound = {'Al': 'mp-134'}
                 # 'Ta': 'mp-569794',
-                # 'Co': 'mp-102',
+    # compound = {'Co': 'mp-102'}
                 # 'Nb': 'mp-75',
-                # 'GaAs': 'mp-2354',
+    # compound = {'GaAs': 'mp-2534'}
                 # 'Re': 'mp-1186901'}
 
     return hydrogen, compound
