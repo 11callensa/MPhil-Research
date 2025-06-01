@@ -56,12 +56,14 @@ def set_test_materials():
 
     hydrogen = 'H2'
 
-    compound = {'NiO': 'mp-19009',
-                'Fe': 'mp-13',
-                'Mo': 'mp-129',
-                'Si': 'mp-149',
-                'In2O3': 'mp-22598',
-                'SiO2': 'mp-7000'}
+    # compound = {'NiO': 'mp-19009',
+    #             'Fe': 'mp-13',
+    #             'Mo': 'mp-129',
+    #             'Si': 'mp-149',
+    #             'In2O3': 'mp-22598',
+    #             'SiO2': 'mp-7000'}
+
+    compound = {'NiO': 'mp-19009'}
 
     return hydrogen, compound
 
