@@ -245,6 +245,7 @@ def load_testing_data(csv_path):
     def parse_column(col_name):
         all_values = []
         for i, value in enumerate(df[col_name]):
+
             try:
                 if isinstance(value, str):
                     # Replace smart quotes with normal quotes
@@ -267,7 +268,7 @@ def load_testing_data(csv_path):
     initial_coords = parse_column('Diffusion Initial Coords')
     oxidation_states = parse_column('Oxidation States')
 
-    num_fixed_atoms = df.iloc[:, 8].astype(int).tolist()
+    num_fixed_atoms = df.iloc[:, 7].astype(int).tolist()
 
     return {
         "system_names": system_names,
@@ -277,8 +278,35 @@ def load_testing_data(csv_path):
         "system_features": system_features,
         "initial_coords": initial_coords,
         "num_fixed_atoms": num_fixed_atoms,
-        'oxidation_states':oxidation_states
+        'oxidation_states': oxidation_states
     }
+
+
+def load_energy_file(csv_path):
+    df = pd.read_csv(csv_path)
+
+    def parse_entry(col_name, fix_strings=False):
+        extracted = []
+        for i, val in enumerate(df[col_name]):
+            try:
+                triple = ast.literal_eval(val)
+                if isinstance(triple, list) and len(triple) >= 3:
+                    extracted.extend([triple[0], triple[1], triple[2]])
+                else:
+                    print(f"Warning: Row {i} in column '{col_name}' does not have 3 elements.")
+            except Exception as e:
+                print(f"Error parsing row {i} in column '{col_name}': {e}")
+        return extracted
+
+    node_features = parse_entry('Node Features (Triple)')
+    edge_features = parse_entry('Edge Features (Triple)')
+    edge_indices = parse_entry('Edge Indices (Triple)')
+
+    return {
+        "node_features": node_features,
+        "edge_features": edge_features,
+        "edge_indices": edge_indices
+    }, df
 
 
 def flatten_graph_data(graph_data):
@@ -332,7 +360,7 @@ def run_training():
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
-    num_train = 9
+    num_train = 12
     train_indices = graph_indices[:num_train]
     test_indices = graph_indices[num_train:]
 
@@ -435,7 +463,7 @@ def run_training():
 
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 9
+    batch_size_train = 6
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -605,7 +633,7 @@ def run_training():
             print("No model name entered. Exiting...")
             exit()
 
-        model_dir = "Diffusion GNN Models"                                                                             # Save the trained model in a folder along with its hyperparameters.
+        model_dir = "Diffusion GNN Models"                                                                              # Save the trained model in a folder along with its hyperparameters.
         os.makedirs(model_dir, exist_ok=True)
         model_save_path = os.path.join(model_dir, f"diffusion_model_{model_name}.pt")
 
@@ -673,7 +701,9 @@ def run_testing():
     output_coord_normaliser.fit(flat_coords_train, len(flat_output_coords_train[0]))
     disp_normaliser.fit(flat_disps_train, len(flat_disps_train[0]))
 
-    test_file_path = "Diffusion Testing Data/NiO_diffusion_testing.csv"
+    name = 'NiO'
+
+    test_file_path = f"Diffusion Testing Data/{name}_diffusion_testing.csv"
     test_data = load_testing_data(test_file_path)
 
     element_lists = [[line.split()[0] for line in group] for group in test_data['initial_coords']]
@@ -763,13 +793,7 @@ def run_testing():
             batch_elements = batch.elements
             batch_num_fixed = batch.num_fixed
 
-            start_time = time.time()
-
             predicted_disp = model(batch.x, batch.edge_index, batch.edge_attr)
-
-            end_time = time.time()
-
-            print('Prediction time: ', end_time - start_time)
 
             start_idx = 0
             movable_mask_global = torch.zeros(batch.input_coords.size(0), dtype=torch.bool, device=device)
@@ -821,7 +845,7 @@ def run_testing():
 
     predicted_xyz = []
 
-    for i, (name, elements, coords) in enumerate(zip(all_names, all_elements, all_predicted_coords)):
+    for i, (elements, coords) in enumerate(zip(all_elements, all_predicted_coords)):
         filename = f"Predicted Coords TESTING/{name}_predicted.xyz"
 
         xyz_string = f"{len(elements)}\n"
@@ -836,6 +860,7 @@ def run_testing():
             f.write(xyz_string)
 
     print("Predicted Optimised XYZ: ", predicted_xyz)
+
     print('\n Creating Energy and Temperature Testing Files...')
 
     node_features_opt_pred_comb, edge_features_opt_pred_comb = node_edge_features(predicted_xyz, test_data['edge_indices'][0],
@@ -845,18 +870,52 @@ def run_testing():
     print('Predicted Optimised Node Features: ', node_features_opt_pred_comb)
     print('Predicted Optimised Edge Features: ', edge_features_opt_pred_comb)
 
-    energy_file_path = "Energy Testing Data/NiO_energy_testing.csv"
+    print(test_data['num_fixed_atoms'])
 
-    with open(energy_file_path, mode='r', newline='') as file:
-        reader = list(csv.reader(file))
+    H_opt_pred_xyz = predicted_xyz[test_data['num_fixed_atoms'][0]:]  # Extract the optimised hydrogen positions.
+    print("H Opt XYZ: ", H_opt_pred_xyz)
 
-        for i, row in enumerate(reader[1:], start=1):
-            row[1] = str(node_features_opt_pred_comb)
-            row[2] = str(edge_features_opt_pred_comb)
+    energy_file_path = f"Energy Testing Data/{name}_energy_testing.csv"
 
-        with open(energy_file_path, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerows(reader)
+    energy_data, df = load_energy_file(energy_file_path)
+
+    print(energy_data['edge_indices'][2])
+
+    node_features_opt_pred_H, edge_features_opt_pred_H = node_edge_features(H_opt_pred_xyz, energy_data['edge_indices'][2],
+                                                                  test_data['oxidation_states'],
+                                                                  test_data['num_fixed_atoms'][0],
+                                                                  1)
+
+    print('Predicted Optimised H Alone Node Features: ', node_features_opt_pred_H)
+    print('Predicted Optimised H Alone Edge Features: ', edge_features_opt_pred_H)
+
+    old_node_features = energy_data['node_features']
+    old_edge_features = energy_data['edge_features']
+
+    # df = pd.read_csv(energy_file_path)
+
+    # old_node_features = ast.literal_eval(df.loc[0, "Node Features (Triple)"])
+    # old_edge_features = ast.literal_eval(df.loc[1, "Edge Features (Triple)"])
+
+    new_node_features = [
+        node_features_opt_pred_comb,  # Combined (predicted)
+        old_node_features[1],  # Keep existing crystal features
+        node_features_opt_pred_H  # Hydrogen (predicted)
+    ]
+
+    new_edge_features = [
+        edge_features_opt_pred_comb,  # Combined (predicted)
+        old_edge_features[1],  # Keep existing crystal features
+        edge_features_opt_pred_H  # Hydrogen (predicted)
+    ]
+
+    df.loc[0, "Node Features (Triple)"] = str(new_node_features)
+    df.loc[1, "Edge Features (Triple)"] = str(new_edge_features)
+
+    df.to_csv(energy_file_path, index=False)
+
+    print(f"Updated {name} testing file successfully.")
+
 
 # run_training()
 run_testing()
