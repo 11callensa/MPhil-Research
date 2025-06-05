@@ -18,6 +18,11 @@ from tkinter import filedialog
 
 from Compound_Properties import node_edge_features
 
+import Energy_Model_Combined
+import Energy_Model_Compound
+import Energy_Model_H
+import Temperature_Model
+
 # if torch.cuda.is_available():
 #     device = torch.device("cuda")
 # elif torch.backends.mps.is_available():
@@ -301,6 +306,35 @@ def load_energy_file(csv_path):
     node_features = parse_entry('Node Features (Triple)')
     edge_features = parse_entry('Edge Features (Triple)')
     edge_indices = parse_entry('Edge Indices (Triple)')
+
+    return {
+        "node_features": node_features,
+        "edge_features": edge_features,
+        "edge_indices": edge_indices
+    }, df
+
+
+def load_temp_file(csv_path):
+    df = pd.read_csv(csv_path)
+
+    def parse_entry(col_name):
+        num_rows = len(df)
+        all_graphs = []
+
+        for i in range(num_rows):
+            value = df[col_name].iloc[i]
+            try:
+                parsed_value = ast.literal_eval(value)  # Parses the string as list
+                all_graphs.append(parsed_value)  # One entry per graph
+            except (ValueError, SyntaxError) as e:
+                print(f"Error parsing {col_name} in row {i}: {e}")
+                return None
+
+        return all_graphs  # List of [graph_1_data, graph_2_data, ...]
+
+    node_features = parse_entry('Node Features Optimised Combined')
+    edge_features = parse_entry('Edge Features Optimised Combined')
+    edge_indices = parse_entry('Edge Indices Combined')
 
     return {
         "node_features": node_features,
@@ -876,10 +910,10 @@ def run_testing():
     print("H Opt XYZ: ", H_opt_pred_xyz)
 
     energy_file_path = f"Energy Testing Data/{name}_energy_testing.csv"
+    temp_file_path = f"Temperature Testing Data/{name}_temperature_testing.csv"
 
-    energy_data, df = load_energy_file(energy_file_path)
-
-    print(energy_data['edge_indices'][2])
+    energy_data, df_energy = load_energy_file(energy_file_path)
+    temp_data, df_temp = load_temp_file(temp_file_path)
 
     node_features_opt_pred_H, edge_features_opt_pred_H = node_edge_features(H_opt_pred_xyz, energy_data['edge_indices'][2],
                                                                   test_data['oxidation_states'],
@@ -889,33 +923,49 @@ def run_testing():
     print('Predicted Optimised H Alone Node Features: ', node_features_opt_pred_H)
     print('Predicted Optimised H Alone Edge Features: ', edge_features_opt_pred_H)
 
+    df_temp.loc[0, "Node Features Optimised Combined"] = str(node_features_opt_pred_comb)
+    df_temp.loc[0, "Edge Features Optimised Combined"] = str(edge_features_opt_pred_comb)
+
+    df_temp.to_csv(temp_file_path, index=False)
+
     old_node_features = energy_data['node_features']
     old_edge_features = energy_data['edge_features']
 
-    # df = pd.read_csv(energy_file_path)
-
-    # old_node_features = ast.literal_eval(df.loc[0, "Node Features (Triple)"])
-    # old_edge_features = ast.literal_eval(df.loc[1, "Edge Features (Triple)"])
-
-    new_node_features = [
+    new_node_features_energy = [
         node_features_opt_pred_comb,  # Combined (predicted)
         old_node_features[1],  # Keep existing crystal features
         node_features_opt_pred_H  # Hydrogen (predicted)
     ]
 
-    new_edge_features = [
+    new_edge_features_energy = [
         edge_features_opt_pred_comb,  # Combined (predicted)
         old_edge_features[1],  # Keep existing crystal features
         edge_features_opt_pred_H  # Hydrogen (predicted)
     ]
 
-    df.loc[0, "Node Features (Triple)"] = str(new_node_features)
-    df.loc[1, "Edge Features (Triple)"] = str(new_edge_features)
+    df_energy.loc[0, "Node Features (Triple)"] = str(new_node_features_energy)
+    df_energy.loc[0, "Edge Features (Triple)"] = str(new_edge_features_energy)
 
-    df.to_csv(energy_file_path, index=False)
+    df_energy.to_csv(energy_file_path, index=False)
 
     print(f"Updated {name} testing file successfully.")
 
+    energy_choice = input(f'Do you want to predict the energies for {name}? y/n: ')
 
-# run_training()
-run_testing()
+    if energy_choice == 'y':
+        pred_combined_energy = Energy_Model_Combined.run_testing()
+        pred_compound_energy = Energy_Model_Compound.run_testing()
+        pred_H_energy = Energy_Model_H.run_testing()
+
+        for comb, compound, H in zip(pred_combined_energy, pred_compound_energy, pred_H_energy):
+            adsorption_energy = comb - (compound + H)
+
+            print(f"{name:<30} | Predicted Adsorption Energy: {float(adsorption_energy):.6f} eV |")
+
+    temp_choice = input(f'Do you want to predict adsorption & desorption temperatures for {name}? y/n: ')
+
+    if temp_choice == 'y':
+        ads_prediction, des_prediction = Temperature_Model.run_testing()
+
+        print(f"{name:<30} | Predicted Adsorption Temperature: {ads_prediction:<10.6f}")
+        print(f"{'':<30} | Predicted Desorption Temperature: {des_prediction:<10.6f}")
