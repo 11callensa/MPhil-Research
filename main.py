@@ -3,14 +3,15 @@ import csv
 from Compound_Database import set_train_materials, set_test_materials
 from Training_Creator_New import data_creator
 import Diffusion_Model
-# import Energy_Model
-# import Temperature_Model
+import Energy_Model_Combined
+import Energy_Model_Compound
+import Energy_Model_H
+import Temperature_Model
 
-run_choice = input("Enter 1) Feature extraction mode, 2) Train a model mode or 3) Test on a preloaded model mode: ")
+run_choice = input("Enter 1) Feature extraction mode, 2) Fully test a material mode, 3) Train a single model mode, "
+                   "4) Test on ONE preloaded model mode: ")
 
 if run_choice == '1':
-
-    print('Pre train Materials')
 
     test_train_choice = input("Do you want to extract features for 1) Training or 2) Testing?: ")                       # Training data creation or testing data creation.
 
@@ -110,7 +111,7 @@ if run_choice == '1':
                                                                         'Num. Placed H Atoms', 'Oxidation States']),
                          ('Temperature Testing Data', temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
                                                       'Edge Features Optimised Combined', 'Edge Indices Combined',
-                                                      'Temperature Input Features', 'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
+                                                      'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
 
             for folder, filename, header in file_data:
                 try:                                                                                                    # Try creating the file in exclusive ('x') mode.
@@ -152,41 +153,54 @@ if run_choice == '1':
                 with open(f'Temperature Testing Data/{temperature_test_filename}', mode='a', newline='') as file:                                     # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
-                        [f'{compound}', '' , '', str(edge_indices[0]), '', str(uncertain_features), str(num_fixed), str(num_H)])
+                        [f'{compound}', str([0]), str([0]), str(edge_indices[0]), str(uncertain_features),
+                         str(num_fixed), str(num_H)])
 
                 print(f"Saved temperature data for {compound} to CSV.")
 
             except Exception as e:
                 print(f"Error processing {compound}: {e}")
 
-
 elif run_choice == '2':
+    Diffusion_Model.run_testing()
 
-    model_choice = input("Which model do you want to train? 1) Optimisation Model, 2) Energy Model or "
-                         "3) Temperature Model")
+elif run_choice == '3':
+
+    model_choice = input("Which model do you want to train? 1) Optimisation Model, 2) Energy Combined Model"
+                         "3) Energy Compound Model, 4) Energy H Model or 5) Temperature Model: ")
 
     if model_choice == '1':
         Diffusion_Model.run_training()
-    # elif model_choice == '2':
-    #     Energy_Model.data_preprocess()
-    # elif model_choice == '3':
-    #     Temperature_Model.run_training()
+    elif model_choice == '2':
+        Energy_Model_Combined.run_training()
+    elif model_choice == '3':
+        Energy_Model_Compound.run_training()
+    elif model_choice == '4':
+        Energy_Model_H.run_training()
+    elif model_choice == '5':
+        Temperature_Model.run_training()
 
     else:
         pass
 
 
-elif run_choice == '3':
+elif run_choice == '4':
 
-    model_choice = input("Which type of model do you want to test with? 1) Optimisation Model, 2) Energy Model or "
-                         "3) Temperature Model")
+    model_choice = input("Which type of model do you want to perform an individual test with? "
+                         "1) Optimisation Model, 2) Energy Combined Model, 3) Energy Compound Model,"
+                         "4) Energy H model or 5) Temperature Model")
 
     if model_choice == '1':
         Diffusion_Model.run_testing()
-    # elif model_choice == '2':
-    #
-    # elif model_choice == '3':
-    #
-    # else:
+    elif model_choice == '2':
+        Energy_Model_Combined.run_testing()
+    elif model_choice == '3':
+        Energy_Model_Compound.run_testing()
+    elif model_choice == '4':
+        Energy_Model_H.run_testing()
+    elif model_choice == '5':
+        Temperature_Model.run_testing()
+
+
 
 
