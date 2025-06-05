@@ -250,15 +250,13 @@ def rotater(xyz):
     return rotated_coords
 
 
-import numpy as np
-
-def tiler(atoms_list, mode='2x2'):
+def tiler(atoms_list):
     """
-    Tiles the atomic coordinates in either a 2x2 or 3x1 pattern.
+    Tiles the atomic coordinates in either a 2x2, 3x1, or 2x1 pattern.
 
     Parameters:
     - atoms_list: List of strings with format "Element x y z"
-    - mode: '2x2' for a 2x2 tiling or '3x1' for a linear 3x1 tiling along x
+    - mode: '2x2', '3x1', or '2x1'
 
     Returns:
     - tiled_atoms: List of strings in same format, tiled accordingly
@@ -285,19 +283,24 @@ def tiler(atoms_list, mode='2x2'):
     # Define shift vectors based on mode
     if mode == '2x2':
         shift_vectors = [
-            np.array([0, 0, 0]),         # [1]
-            np.array([dx, 0, 0]),        # [2]
-            np.array([0, dy, 0]),        # [3]
-            np.array([dx, dy, 0])        # [4]
+            np.array([0, 0, 0]),
+            np.array([dx, 0, 0]),
+            np.array([0, dy, 0]),
+            np.array([dx, dy, 0])
         ]
     elif mode == '3x1':
         shift_vectors = [
-            np.array([0, 0, 0]),         # [1]
-            np.array([dx, 0, 0]),        # [2]
-            np.array([2 * dx, 0, 0])     # [3]
+            np.array([0, 0, 0]),
+            np.array([dx, 0, 0]),
+            np.array([2 * dx, 0, 0])
+        ]
+    elif mode == '2x1':
+        shift_vectors = [
+            np.array([0, 0, 0]),
+            np.array([dx, 0, 0])
         ]
     else:
-        raise ValueError("Invalid mode. Choose '2x2' or '3x1'.")
+        raise ValueError("Invalid mode. Choose '2x2', '3x1', or '2x1'.")
 
     # Generate tiled atoms
     tiled_atoms = []
