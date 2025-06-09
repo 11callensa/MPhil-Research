@@ -34,7 +34,7 @@ def save_edges_to_csv(edges, name):
         writer.writerows(edges)
 
 
-def build_connections(positions, num_fixed, name):
+def build_connections(positions, num_fixed, name, save=1):
     """
         Build connections for a crystal structure. It keeps the original compound edges unchanged while connecting
         each hydrogen atom to n nearest hydrogen atoms.It also connects each hydrogen atom to at least m nearest
@@ -96,12 +96,18 @@ def build_connections(positions, num_fixed, name):
 
     fig = plt.figure()                                                                                                  # Plot the updated structure.
     ax = fig.add_subplot(111, projection='3d')
-    draw_plot()
-    plt.show()
 
-    save_edges_to_csv(edge_indices, name)                                                                               # Save updated edges.
+    if save == 1:
+        draw_plot()
+        plt.show()
+    else:
+        pass
 
-    return edge_indices
+    if save == 1:
+        save_edges_to_csv(edge_indices, name)                                                                               # Save updated edges.
+        return edge_indices
+    else:
+        return edge_indices
 
 # print(len(coords))
 
