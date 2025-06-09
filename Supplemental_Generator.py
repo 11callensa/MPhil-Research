@@ -33,7 +33,7 @@ def generate_h2_coordinates(n_molecules, bond_length=0.708, box_size=10.0, seed=
 
     all_atoms = []
     atom_count = 1
-    min_distance = 2 * bond_length  # 1.416 Å
+    min_distance = 1 * bond_length  # 1.416 Å
 
     def is_valid(new_atoms, existing_atoms):
         for na in new_atoms:
@@ -73,8 +73,8 @@ num_sims = 2
 
 for i in range(num_sims):
 
-    gen = 1
-    xyz_coords = generate_h2_coordinates(3)
+    gen = 20
+    xyz_coords = generate_h2_coordinates(gen)
 
     edge_indices = build_connections(xyz_coords, gen*2, 'H', 0)
     centered_xyz, _ = centre_coords(xyz_coords, gen*2)
@@ -85,5 +85,5 @@ for i in range(num_sims):
     with open(filename, mode='a', newline='') as file1:  # Append mode.
         writer = csv.writer(file1)
         writer.writerow(
-            [f'H_sim_{i}', str([node_features]), str([edge_features]), str(edge_indices), str([0]),
+            [f'H_sim_{10}_by_{10}_{gen}_{i}', str([node_features]), str([edge_features]), str(edge_indices), str([0]),
              str([energy]), str([0]), str([0]), str(gen*2)])
