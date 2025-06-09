@@ -1,11 +1,12 @@
 from DFT_New import calculate_energy
 from Compound_Properties import node_edge_features
 from Mol_Geometry import centre_coords
-from Build_Connections import build_connections
 from Plotting import plot_crystal
 
 import numpy as np
 import csv
+import matplotlib.pyplot as plt
+from scipy.spatial import KDTree
 
 
 filename = 'H_training_supplement.csv'
@@ -27,7 +28,64 @@ for filename, header in file_data:
         print(f"File '{filename}' already exists. Appended new row.")
 
 
-def generate_h2_coordinates(n_molecules, bond_length=0.708, box_size=10.0, seed=None, max_attempts=1000):
+def build_connections(positions, save=1):
+    """
+        Build connections for a crystal structure. It keeps the original compound edges unchanged while connecting
+        each hydrogen atom to n nearest hydrogen atoms.It also connects each hydrogen atom to at least m nearest
+        compound atoms.
+
+        :param positions: List of atomic positions as strings.
+        :param num_fixed: Number of atoms in the compound (fixed structure).
+        :param name: Name used to load/save edge indices.
+        :return: Updated edge indices.
+    """
+
+    atom_coordinates = np.array([list(map(float, pos.split()[1:])) for pos in positions])                               # Parse positions into numpy array.
+
+    tree_hydrogen = KDTree(atom_coordinates)
+
+    edge_indices = []
+
+    for i in range(len(atom_coordinates)):                                                                              # Find n nearest hydrogen neighbors for each hydrogen atom.
+        k_h = min(7, len(atom_coordinates))
+        _, neighbor_indices = tree_hydrogen.query(atom_coordinates[i], k=k_h)
+        # Get n (includes self).
+        for neighbor in neighbor_indices[1:]:                                                                           # Skip self (first index).
+            edge = tuple(sorted([i, neighbor]))                                                  # Undirected.
+            if edge not in edge_indices:
+                edge_indices.append(edge)
+
+    def draw_plot():                                                                                                    # Function to visualize connections.
+        ax.clear()
+
+        colors = ['black' for i in range(len(atom_coordinates))]                            # Color compound atoms black, hydrogen atoms red.
+        ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c=colors, marker='o')
+
+        for i, (x, y, z) in enumerate(atom_coordinates):                                                                # Label atoms.
+            ax.text(x, y, z, str(i), color='black')
+
+        for bond in edge_indices:                                                                                       # Draw bonds.
+            i, j = bond
+            bond_color = 'b'                                                # Green = compound bonds, Blue = hydrogen bonds
+            ax.plot([atom_coordinates[i, 0], atom_coordinates[j, 0]],
+                    [atom_coordinates[i, 1], atom_coordinates[j, 1]],
+                    [atom_coordinates[i, 2], atom_coordinates[j, 2]], c=bond_color)
+
+        plt.draw()
+
+    fig = plt.figure()                                                                                                  # Plot the updated structure.
+    ax = fig.add_subplot(111, projection='3d')
+
+    if save == 1:
+        draw_plot()
+        plt.show()
+    else:
+        pass
+
+    return edge_indices
+
+
+def generate_h2_coordinates(n_molecules, bond_length=0.708, box_size=10, seed=None, max_attempts=1000):
     if seed is not None:
         np.random.seed(seed)
 
@@ -69,21 +127,24 @@ def generate_h2_coordinates(n_molecules, bond_length=0.708, box_size=10.0, seed=
     return formatted
 
 
-num_sims = 2
+num_sims = 1
 
 for i in range(num_sims):
 
-    gen = 20
+    gen = 2
     xyz_coords = generate_h2_coordinates(gen)
 
-    edge_indices = build_connections(xyz_coords, gen*2, 'H', 0)
+    edge_indices = build_connections(xyz_coords, 0)
+
     centered_xyz, _ = centre_coords(xyz_coords, gen*2)
     energy = calculate_energy(centered_xyz)
 
     node_features, edge_features = node_edge_features(centered_xyz, edge_indices, {'H': 0}, gen*2, 1)
 
+    plot_crystal(centered_xyz, edge_indices)
+
     with open(filename, mode='a', newline='') as file1:  # Append mode.
         writer = csv.writer(file1)
         writer.writerow(
-            [f'H_sim_{10}_by_{10}_{gen}_{i}', str([node_features]), str([edge_features]), str(edge_indices), str([0]),
+            [f'H_sim_{40}_by_{40}_{gen}_{i}', str([node_features]), str([edge_features]), str(edge_indices), str([0]),
              str([energy]), str([0]), str([0]), str(gen*2)])
