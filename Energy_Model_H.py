@@ -14,6 +14,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
 from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import GlobalAttention
 from torch_geometric.nn import global_add_pool
 
 import matplotlib.pyplot as plt
@@ -26,7 +27,7 @@ from tkinter import filedialog
 # else:
 #     device = torch.device("cpu")
 
-device = torch.device("cpu")
+device = torch.device("mps")
 
 print("Device:", device)
 
@@ -113,24 +114,18 @@ class GNN(nn.Module):
         self.gcn2 = MyCustomGNNLayer(hidden_gnn_dim1, output_edge_dim, hidden_gnn_dim2)
         self.gcn3 = MyCustomGNNLayer(hidden_gnn_dim2, output_edge_dim, hidden_gnn_dim2)
 
+        # Gating NN: Maps node features to attention weights (scalar per node)
+        self.att_pool = GlobalAttention(gate_nn=nn.Sequential(
+            nn.Linear(hidden_gnn_dim2, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        ))
+
         self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
 
-        self.relu = nn.ReLU()
-
     def forward(self, node_features, edge_index, edge_features, batch):
-        """
-        Forward pass through the GNN.
-
-        node_features: Tensor of shape (num_nodes, feature_dim).
-        edge_index: Tensor of shape (2, num_edges).
-        edge_features: Tensor of shape (num_edges, edge_feature_dim).
-
-        Returns:
-        output: Predicted output features for each node.
-        """
-
         node_features = self.node_feature_combiner(node_features)
-        edge_features = self.edge_feature_combiner(edge_features).squeeze(-1)  # Ensure shape is (num_edges,)
+        edge_features = self.edge_feature_combiner(edge_features).squeeze(-1)
 
         edge_index = edge_index.to(torch.long)
 
@@ -146,8 +141,11 @@ class GNN(nn.Module):
         x = F.relu(x)
         x = self.gcn2(x, edge_index, edge_features)
         x = F.relu(x)
+        x = self.gcn3(x, edge_index, edge_features)
+        x = F.relu(x)
 
-        x = global_mean_pool(x, batch)  # shape: [num_graphs, hidden_dim]
+        # Use learnable attention-based pooling instead of mean pooling
+        x = self.att_pool(x, batch)
 
         output = self.fc_out(x)
 
@@ -195,6 +193,49 @@ def load_training_data(csv_path):
         "edge_indices": edge_indices,
         "system_features": system_features,
         "energy_output": energy_output
+    }
+
+
+def load_suppl_data(csv_path):
+
+    df = pd.read_csv(csv_path)
+
+    def parse_column(col_name, index):
+        num_rows = len(df)
+        all_graphs = []
+
+        for i in range(num_rows):
+            value = df[col_name].iloc[i]
+            if index == False:
+                try:
+                    parsed_value = ast.literal_eval(value)  # Parses the string as list
+                    all_graphs.append(parsed_value[0])  # One entry per graph
+                except (ValueError, SyntaxError) as e:
+                    print(f"Error parsing {col_name} in row {i}: {e}")
+                    return None
+            else:
+                try:
+                    parsed_value = ast.literal_eval(value)  # Parses the string as list
+                    all_graphs.append(parsed_value)  # One entry per graph
+                except (ValueError, SyntaxError) as e:
+                    print(f"Error parsing {col_name} in row {i}: {e}")
+                    return None
+
+        return all_graphs  # List of [graph_1_data, graph_2_data, ...]
+
+    system_names = df[df.columns[0]].tolist()
+
+    node_features = parse_column('Node Features', False)
+    edge_features = parse_column('Edge Features', False)
+    edge_indices = parse_column('Edge Indices', True)
+    energy_output = parse_column('Energy Output Features', False)
+
+    return {
+        "system_names": system_names,
+        "node_features": node_features,
+        "edge_features": edge_features,
+        "edge_indices": edge_indices,
+        "energy_output": energy_output,
     }
 
 
@@ -342,7 +383,36 @@ class PreProcess:
 def run_training():
 
     file_path = "energy_training.csv"
-    data = load_training_data(file_path)
+    orig_data = load_training_data(file_path)
+
+    # print('Orig data: ', orig_data['node_features'])
+    # print('Orig data number of graphs: ', len(orig_data['node_features']))
+
+    data = dict()
+
+    supplementary_path = "H_training_supplement.csv"
+    suppl_data = load_suppl_data(supplementary_path)
+
+    # print('Suppl Data: ', suppl_data['node_features'])
+    # print('Suppl data number of graphs: ', len(suppl_data['node_features']))
+    # input()
+
+    data['node_features'] = orig_data['node_features']
+    data['edge_features'] = orig_data['edge_features']
+    data['edge_indices'] = orig_data['edge_indices']
+    data['energy_output'] = orig_data['energy_output']
+    data['system_names'] = orig_data['system_names']
+
+    # print('Original Total Data: ', data['node_features'])
+    # print('Number of graphs: ', len(data['node_features']))
+
+    data['node_features'].extend(suppl_data['node_features'])
+    data['edge_features'].extend(suppl_data['edge_features'])
+    data['edge_indices'].extend(suppl_data['edge_indices'])
+    data['energy_output'].extend(suppl_data['energy_output'])
+    data['system_names'].extend(suppl_data['system_names'])
+
+    # print('Data energy output: ', data['energy_output'])
 
     random.seed(int(time.time()))
     graph_indices = list(range(len(data['node_features'])))
@@ -426,14 +496,14 @@ def run_training():
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = AdaBelief(model.parameters(), lr=0.001, weight_decay=1e-06)
+    optimizer = AdaBelief(model.parameters(), lr=0.0001, weight_decay=1e-06)
 
     loss_train_list = []
     loss_test_list = []
 
     loss_func = nn.MSELoss()
 
-    batch_size_train = 12
+    batch_size_train = 176
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -650,3 +720,6 @@ def run_testing():
         print(f"{name:<30} | Predicted Energy: {float(pred):.6f} eV |")
 
     return pred
+
+
+run_training()
