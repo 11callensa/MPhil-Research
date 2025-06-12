@@ -45,32 +45,24 @@ class LogCoshLoss(nn.Module):                                                   
 
 
 class SchNetWithNumPlaced(nn.Module):
-    def __init__(self, hidden_channels=128):
+    def __init__(self, hidden_channels):
         super().__init__()
         self.schnet = SchNet(hidden_channels=hidden_channels)  # returns node embeddings
 
         self.fc = nn.Sequential(
-            nn.Linear(hidden_channels, 64),
+            nn.Linear(1, 64),
             nn.SiLU(),
-            nn.Linear(64, 1)
+            nn.Linear(64, 1),
+            nn.SiLU()
         )
 
-    def forward(self, z, pos, num_placed, batch):
-        # Get node embeddings [num_nodes, hidden_channels]
+    def forward(self, z, pos, batch):
+
         node_embeddings = self.schnet(z, pos, batch)
 
-        # Pool to graph embeddings [batch_size, hidden_channels]
-        # pooled = global_mean_pool(node_embeddings, batch)
+        out = self.fc(node_embeddings)
 
-        # if num_placed.dim() == 1:
-        #     num_placed = num_placed.unsqueeze(1)
-        #
-        # # Combine pooled embeddings with scalar
-        # combined = torch.cat([pooled, num_placed], dim=1)
-
-        # Predict energy
-        # out = self.fc(pooled)
-        return node_embeddings
+        return out
 
 
 def load_training_data(csv_path):
@@ -321,27 +313,13 @@ def run_training():
 
     supplementary_path = "H_training_supplement.csv"
     suppl_data = load_suppl_data(supplementary_path)
-    # suppl_data['node_features'] = [np.array(graph)[:, 3:6].tolist() for graph in suppl_data['node_features']]
-
-    # print('Suppl Data: ', suppl_data['node_features'])
-    # print('Suppl data number of graphs: ', len(suppl_data['node_features']))
-    # input()
 
     data['node_features'] = orig_data['node_features']
-    # data['node_features'] = [np.array(graph)[:, 3:6].tolist() for graph in orig_data['node_features']]
     data['edge_features'] = orig_data['edge_features']
     data['edge_indices'] = orig_data['edge_indices']
     data['energy_output'] = orig_data['energy_output']
     data['system_names'] = orig_data['system_names']
     data['num_placed'] = orig_data['num_placed']
-
-    # data['node_features'] = [np.array(graph)[:, 3:6].tolist() for graph in suppl_data['node_features']]
-    # data['node_features'] = suppl_data['node_features']
-    # data['edge_features'] = suppl_data['edge_features']
-    # data['edge_indices'] = suppl_data['edge_indices']
-    # data['energy_output'] = suppl_data['energy_output']
-    # data['system_names'] = suppl_data['system_names']
-    # data['num_placed'] = suppl_data['num_placed']
 
     data['node_features'].extend(suppl_data['node_features'])
     data['edge_features'].extend(suppl_data['edge_features'])
@@ -350,13 +328,11 @@ def run_training():
     data['system_names'].extend(suppl_data['system_names'])
     data['num_placed'].extend(suppl_data['num_placed'])
 
-    # print('Data energy output: ', data['energy_output'])
-
     random.seed(int(time.time()))
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
-    num_train = 176
+    num_train = 190
     print('No. of training graphs: ', num_train)
     train_indices = graph_indices[:num_train]
     test_indices = graph_indices[num_train:]
@@ -380,7 +356,7 @@ def run_training():
     flat_nodes_train, _ = flatten_graph_data(train_node_feats)
     flat_edges_train, _ = flatten_graph_data(train_edge_feats)
 
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
+    node_normaliser.fit(flat_nodes_train, 7)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     energy_normaliser.fit(train_energies)
     num_placed_normaliser.fit(train_num_placed)
@@ -423,30 +399,19 @@ def run_training():
 
     epochs = 500
 
-    node_size = 6
-    node_hidden_size = 512
-    node_output_size = 512
+    schnet_nodes = 720
 
-    edge_size = 2
-    edge_hidden_size = 256
-    edge_output_size = 256
-
-    hidden_size1 = 256
-    hidden_size2 = 256
-    gnn_output_size = 1
-
-    model = SchNetWithNumPlaced(hidden_channels=512).to(device)
+    model = SchNetWithNumPlaced(hidden_channels=schnet_nodes).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 
     loss_train_list = []
     loss_test_list = []
 
-    # loss_func = nn.MSELoss()
+    loss_func = nn.MSELoss()
+    # loss_func = nn.SmoothL1Loss()
 
-    loss_func = nn.SmoothL1Loss()
-
-    batch_size_train = 176
+    batch_size_train = 190
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -461,13 +426,7 @@ def run_training():
             pos = batch.x[:, 0:3].float()  # 3D coordinates
             batch_idx = batch.batch  # batch indices per atom
 
-            # print("pos.shape:", pos.shape)  # [num_nodes, 3]
-            # print("z.shape:", z.shape)  # [num_nodes]
-            # print("batch_idx.shape:", batch_idx.shape)  # [num_nodes]
-            # print("max batch_idx:", batch_idx.max().item())  # Should be < batch_size
-            # print("min batch_idx:", batch_idx.min().item())
-
-            predicted_train_energy = model(z, pos, batch.num_placed, batch_idx)
+            predicted_train_energy = model(z, pos, batch_idx)
 
             loss = loss_func(predicted_train_energy, batch.y.view(-1, 1))
 
@@ -488,10 +447,8 @@ def run_training():
                 pos = batch_test.x[:, 0:3].float()  # 3D coordinates
                 batch_idx = batch_test.batch  # batch indices per atom
 
-                # predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr,
-                #                               batch_test.num_placed, batch_test.batch)
+                predicted_test_energy = model(z, pos, batch_idx)
 
-                predicted_test_energy = model(z, pos, batch_test.num_placed, batch_idx)
                 loss = loss_func(predicted_test_energy, batch_test.y.view(-1, 1))
                 test_loss += loss.item()
 
