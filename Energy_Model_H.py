@@ -4,152 +4,136 @@ import numpy as np
 import pandas as pd
 import random
 import time
+import inspect
 
 import torch
-import torch.optim as optim
 from torch_optimizer import AdaBelief
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
-from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
-from torch_geometric.nn import global_mean_pool
-from torch_geometric.nn import GlobalAttention
-from torch_geometric.nn import global_add_pool
+from torch_scatter import scatter
+
+from e3nn.o3 import Irreps
+from e3nn.o3 import spherical_harmonics
+from e3nn.nn import Gate
+from e3nn.nn.models.gate_points_2101 import FullyConnectedTensorProduct, Convolution
+from e3nn import o3
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
-
-# if torch.cuda.is_available():
-#     device = torch.device("cuda")
-# elif torch.backends.mps.is_available():
-#     device = torch.device("mps")
-# else:
-#     device = torch.device("cpu")
 
 device = torch.device("mps")
 
 print("Device:", device)
 
 
-class LogCoshLoss(nn.Module):                                                                                           # Setup the log-cosh loss function.
-    def forward(self, pred, target):
-        """
-            Takes in predicted and target values and calculates the log-cosh loss.
+class RBFLayer(torch.nn.Module):
+    def __init__(self, num_centers=10, cutoff=5.0):
+        super().__init__()
+        self.centers = torch.linspace(0, cutoff, num_centers)
+        self.width = (self.centers[1] - self.centers[0]) * 1.0
 
-            :param pred: Predicted values.
-            :param target: Target (true) values.
-            :return: The log-cosh loss.
-        """
-        return torch.mean(torch.log(torch.cosh(pred - target + 1e-12)))
-
-
-class FCNN_FeatureCombiner(nn.Module):
-    def __init__(self, input_dim, hidden_size, output_dim):
-        super(FCNN_FeatureCombiner, self).__init__()
-
-        self.input = nn.Linear(input_dim, hidden_size)
-        # self.input = nn.Linear(input_dim, output_dim)
-        self.fc1 = nn.Linear(hidden_size, output_dim)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-
-        x = self.input(x)
-        x = self.relu(x)
-        x = self.fc1(x)
-        x = self.relu(x)
-
-        return x
+    def forward(self, d):
+        # d: [num_edges]
+        d = d.unsqueeze(-1)  # [num_edges, 1]
+        return torch.exp(- ((d - self.centers.to(d.device)) ** 2) / self.width**2)
 
 
-class MyCustomGNNLayer(MessagePassing):
-    def __init__(self, node_in_dim, edge_in_dim, hidden_dim, aggr='add'):
-        super().__init__(aggr=aggr)  # "add", "mean", or "max"
+class SimpleMACE(nn.Module):
+    def __init__(self,layers, nodes, neighbours, embeddings,
+                 input_irreps="1x0e",
+                 hidden_irreps="20x0e + 20x1o",
+                 output_irreps="1x0e"):
+        super().__init__()
 
-        self.message_mlp = nn.Sequential(
-            nn.Linear(node_in_dim + edge_in_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim)
+        self.input_irreps = Irreps(input_irreps)
+        self.hidden_irreps = Irreps(hidden_irreps)
+        self.output_irreps = Irreps(output_irreps)
+
+        self.embedding = nn.Embedding(num_embeddings=embeddings, embedding_dim=self.input_irreps.dim)
+
+        # Use full spherical harmonics: "1x0e + 1x1o" (dim=4)
+        self.edge_attr_irreps = o3.Irreps.spherical_harmonics(lmax=0)  # = "1x0e + 1x1o"
+
+        # Input tensor product: input × edge_attr → hidden
+        self.tp_in = FullyConnectedTensorProduct(
+            self.input_irreps,
+            self.edge_attr_irreps,
+            self.hidden_irreps
         )
 
-        self.update_mlp = nn.Sequential(
-            nn.Linear(hidden_dim + node_in_dim, hidden_dim),
-            nn.ReLU()
+        self.rbf = RBFLayer()
+
+        # Convolution: hidden × edge_attr → rich intermediate features
+        self.conv = Convolution(
+            irreps_in=self.hidden_irreps,
+            irreps_node_attr=self.hidden_irreps,
+            irreps_edge_attr=self.edge_attr_irreps,
+            irreps_out=Irreps("40x0e + 10x1o + 6x2e"),
+            number_of_basis=10,
+            radial_layers=layers,
+            radial_neurons=nodes,
+            num_neighbors=neighbours,
         )
 
-    def forward(self, x, edge_index, edge_attr):
-        # x: [num_nodes, node_in_dim]
-        # edge_index: [2, num_edges]
-        # edge_attr: [num_edges, edge_in_dim]
-        return self.propagate(edge_index=edge_index, x=x, edge_attr=edge_attr)
+        # Gate activation over scalar and vector channels
+        scalars_list = [mulir for mulir in self.hidden_irreps if (mulir.ir.l == 0 and mulir.ir.p == 1)]
+        vectors_list = [mulir for mulir in self.hidden_irreps if (mulir.ir.l == 1 and mulir.ir.p == -1)]
 
-    def message(self, x_j, edge_attr):
-        # x_j: [num_edges, node_in_dim] = features of neighbor nodes
-        # edge_attr: [num_edges, edge_in_dim]
-        msg_input = torch.cat([x_j, edge_attr], dim=-1)
-        return self.message_mlp(msg_input)
+        scalars = Irreps(scalars_list)
+        vectors = Irreps(vectors_list)
 
-    def update(self, aggr_out, x):
-        # aggr_out: [num_nodes, hidden_dim]
-        # x: [num_nodes, node_in_dim]
-        return self.update_mlp(torch.cat([aggr_out, x], dim=-1))
+        self.gate = Gate(
+            irreps_scalars=scalars,
+            act_scalars=[nn.SiLU()] * len(scalars),
+            act_gates=[nn.Sigmoid()] * len(scalars),
+            irreps_gates=Irreps(f"{vectors.num_irreps}x0e"),
+            irreps_gated=vectors,
+        )
 
+        # Output tensor product: gated × edge_attr → output
+        self.tp_out = FullyConnectedTensorProduct(
+            self.gate.irreps_out,
+            self.edge_attr_irreps,
+            self.output_irreps
+        )
 
-class GNN(nn.Module):
-    def __init__(self, node_dim, hidden_node_dim, output_node_dim,
-                 edge_dim, hidden_edge_dim, output_edge_dim,
-                 hidden_gnn_dim1, hidden_gnn_dim2, output_gnn_dim):
-        super(GNN, self).__init__()
+    def forward(self, node_feats, pos, edge_index, batch):
 
-        self.node_feature_combiner = FCNN_FeatureCombiner(input_dim=node_dim,
-                                                          hidden_size=hidden_node_dim,
-                                                          output_dim=output_node_dim)
+        # Make graph undirected
+        edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+        edge_src, edge_dst = edge_index
 
-        self.edge_feature_combiner = FCNN_FeatureCombiner(input_dim=edge_dim,
-                                                          hidden_size=hidden_edge_dim,
-                                                          output_dim=output_edge_dim)
+        # Edge vectors
+        edge_vec = pos[edge_dst] - pos[edge_src]
+        edge_length = edge_vec.norm(dim=-1)
+        edge_unit = edge_vec / edge_length.unsqueeze(-1)
 
-        self.gcn1 = MyCustomGNNLayer(output_node_dim, output_edge_dim, hidden_gnn_dim1)
-        self.gcn2 = MyCustomGNNLayer(hidden_gnn_dim1, output_edge_dim, hidden_gnn_dim2)
-        self.gcn3 = MyCustomGNNLayer(hidden_gnn_dim2, output_edge_dim, hidden_gnn_dim2)
+        edge_attr = spherical_harmonics(0, edge_unit, normalize=True, normalization='component')  # [num_edges, 3]
 
-        # Gating NN: Maps node features to attention weights (scalar per node)
-        self.att_pool = GlobalAttention(gate_nn=nn.Sequential(
-            nn.Linear(hidden_gnn_dim2, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
-        ))
+        node_feats = self.embedding(node_feats)
 
-        self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
+        x = self.tp_in(node_feats[edge_src], edge_attr)
 
-    def forward(self, node_features, edge_index, edge_features, batch):
-        node_features = self.node_feature_combiner(node_features)
-        edge_features = self.edge_feature_combiner(edge_features).squeeze(-1)
+        # RBF expansion
+        edge_length_embedded = self.rbf(edge_length)
 
-        edge_index = edge_index.to(torch.long)
+        # Convolution
+        x = self.conv(x, x, edge_src, edge_dst, edge_attr, edge_length_embedded)
 
-        def make_undirected(edge_index, edge_attr):
-            edge_index_reversed = edge_index.flip(0)
-            edge_index_full = torch.cat([edge_index, edge_index_reversed], dim=1)
-            edge_attr_full = torch.cat([edge_attr, edge_attr], dim=0)
-            return edge_index_full, edge_attr_full
+        x = x.to(dtype=torch.float32, device=device)
 
-        edge_index, edge_features = make_undirected(edge_index, edge_features)
+        # Gate nonlinearity
+        x = self.gate(x)
 
-        x = self.gcn1(node_features, edge_index, edge_features)
-        x = F.relu(x)
-        x = self.gcn2(x, edge_index, edge_features)
-        x = F.relu(x)
-        x = self.gcn3(x, edge_index, edge_features)
-        x = F.relu(x)
+        # Gather edge-wise features
+        x_edge = x[edge_src]
 
-        # Use learnable attention-based pooling instead of mean pooling
-        x = self.att_pool(x, batch)
+        out = self.tp_out(x_edge, edge_attr)
 
-        output = self.fc_out(x)
+        # Aggregate to graph-level prediction (e.g. energy)
+        energy = scatter(out, batch[edge_src], dim=0, reduce='sum')
 
-        return output
+        return energy
 
 
 def load_training_data(csv_path):
@@ -180,11 +164,14 @@ def load_training_data(csv_path):
 
     system_names = parse_entry(df.columns[0], fix_strings=True)
 
+    num_placed = []
+
     node_features = parse_entry('Node Features (Triple)')
     edge_features = parse_entry('Edge Features (Triple)')
     edge_indices = parse_entry('Edge Indices (Triple)')
     system_features = parse_entry('Energy Input Features (Triple)')
     energy_output = parse_entry('Energy Output Features (Triple)')
+    num_placed.extend(df['Num. Placed H Atoms'].iloc[row] for row in range(len(df)))
 
     return {
         "system_names": system_names,
@@ -192,50 +179,8 @@ def load_training_data(csv_path):
         "edge_features": edge_features,
         "edge_indices": edge_indices,
         "system_features": system_features,
-        "energy_output": energy_output
-    }
-
-
-def load_suppl_data(csv_path):
-
-    df = pd.read_csv(csv_path)
-
-    def parse_column(col_name, index):
-        num_rows = len(df)
-        all_graphs = []
-
-        for i in range(num_rows):
-            value = df[col_name].iloc[i]
-            if index == False:
-                try:
-                    parsed_value = ast.literal_eval(value)  # Parses the string as list
-                    all_graphs.append(parsed_value[0])  # One entry per graph
-                except (ValueError, SyntaxError) as e:
-                    print(f"Error parsing {col_name} in row {i}: {e}")
-                    return None
-            else:
-                try:
-                    parsed_value = ast.literal_eval(value)  # Parses the string as list
-                    all_graphs.append(parsed_value)  # One entry per graph
-                except (ValueError, SyntaxError) as e:
-                    print(f"Error parsing {col_name} in row {i}: {e}")
-                    return None
-
-        return all_graphs  # List of [graph_1_data, graph_2_data, ...]
-
-    system_names = df[df.columns[0]].tolist()
-
-    node_features = parse_column('Node Features', False)
-    edge_features = parse_column('Edge Features', False)
-    edge_indices = parse_column('Edge Indices', True)
-    energy_output = parse_column('Energy Output Features', False)
-
-    return {
-        "system_names": system_names,
-        "node_features": node_features,
-        "edge_features": edge_features,
-        "edge_indices": edge_indices,
         "energy_output": energy_output,
+        "num_placed": num_placed
     }
 
 
@@ -383,42 +328,21 @@ class PreProcess:
 def run_training():
 
     file_path = "energy_training.csv"
-    orig_data = load_training_data(file_path)
+    data = load_training_data(file_path)
 
-    # print('Orig data: ', orig_data['node_features'])
-    # print('Orig data number of graphs: ', len(orig_data['node_features']))
-
-    data = dict()
-
-    supplementary_path = "H_training_supplement.csv"
-    suppl_data = load_suppl_data(supplementary_path)
-
-    # print('Suppl Data: ', suppl_data['node_features'])
-    # print('Suppl data number of graphs: ', len(suppl_data['node_features']))
-    # input()
-
-    data['node_features'] = orig_data['node_features']
-    data['edge_features'] = orig_data['edge_features']
-    data['edge_indices'] = orig_data['edge_indices']
-    data['energy_output'] = orig_data['energy_output']
-    data['system_names'] = orig_data['system_names']
-
-    # print('Original Total Data: ', data['node_features'])
-    # print('Number of graphs: ', len(data['node_features']))
-
-    data['node_features'].extend(suppl_data['node_features'])
-    data['edge_features'].extend(suppl_data['edge_features'])
-    data['edge_indices'].extend(suppl_data['edge_indices'])
-    data['energy_output'].extend(suppl_data['energy_output'])
-    data['system_names'].extend(suppl_data['system_names'])
-
-    # print('Data energy output: ', data['energy_output'])
+    for i, graph in enumerate(data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        data['node_features'][i] = graph_array.tolist()
 
     random.seed(int(time.time()))
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
-    num_train = len(graph_indices) - 1
+    num_train = 26
     print('No. of training graphs: ', num_train)
     train_indices = graph_indices[:num_train]
     test_indices = graph_indices[num_train:]
@@ -432,10 +356,12 @@ def run_training():
     train_node_feats = extract_by_indices(data, 'node_features', train_indices)
     train_edge_feats = extract_by_indices(data, 'edge_features', train_indices)
     train_energies = extract_by_indices(data, 'energy_output', train_indices)
+    train_num_placed = extract_by_indices(data, 'num_placed', train_indices)
 
     node_normaliser = PreProcess()
     edge_normaliser = PreProcess()
     energy_normaliser = MinMaxNormalizer()
+    num_placed_normaliser = MinMaxNormalizer()
 
     flat_nodes_train, _ = flatten_graph_data(train_node_feats)
     flat_edges_train, _ = flatten_graph_data(train_edge_feats)
@@ -443,6 +369,7 @@ def run_training():
     node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     energy_normaliser.fit(train_energies)
+    num_placed_normaliser.fit(train_num_placed)
 
     flat_nodes, node_sizes = flatten_graph_data(data['node_features'])
     flat_edges, edge_sizes = flatten_graph_data(data['edge_features'])
@@ -450,6 +377,7 @@ def run_training():
     node_features_norm_flat = node_normaliser.transform(flat_nodes)
     edge_features_norm_flat = edge_normaliser.transform(flat_edges)
     energies_norm = energy_normaliser.transform(data['energy_output'])
+    num_placed_norm = num_placed_normaliser.transform(data['num_placed'])
 
     node_features_norm = split_back(node_features_norm_flat, node_sizes)
     edge_features_norm = split_back(edge_features_norm_flat, edge_sizes)
@@ -462,6 +390,7 @@ def run_training():
             x=torch.tensor(node_features_norm[i], dtype=torch.float).to(device),
             edge_index=edge_indices[i],
             edge_attr=torch.tensor(edge_features_norm[i], dtype=torch.float).to(device),
+            num_placed=torch.tensor(num_placed_norm[i], dtype=torch.float).to(device),
             y=torch.tensor(energies_norm[i], dtype=torch.float).to(device))
 
         data_obj.system_name = data['system_names'][i]
@@ -478,32 +407,23 @@ def run_training():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    epochs = 700
+    epochs = 1000
 
-    node_size = 6
-    node_hidden_size = 128
-    node_output_size = 6
+    embeddings = 100
+    nodes = 256
+    layers = 4
+    neighbours = 7
 
-    edge_size = 2
-    edge_hidden_size = 128
-    edge_output_size = 2
+    model = SimpleMACE(layers, nodes, neighbours, embeddings).to(device)
 
-    hidden_size1 = 128
-    hidden_size2 = 1024
-    gnn_output_size = 1
-
-    model = GNN(node_size, node_hidden_size, node_output_size,
-                edge_size, edge_hidden_size, edge_output_size,
-                hidden_size1, hidden_size2, gnn_output_size).to(device)
-
-    optimizer = AdaBelief(model.parameters(), lr=0.0001, weight_decay=1e-06)
+    optimizer = AdaBelief(model.parameters(), lr=0.001)
 
     loss_train_list = []
     loss_test_list = []
 
-    loss_func = nn.MSELoss()
+    loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 176
+    batch_size_train = 200
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -514,9 +434,15 @@ def run_training():
         train_loss = 0.0
 
         for batch in train_loader:
-            predicted_train_energy = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
 
-            loss = loss_func(torch.log1p(predicted_train_energy), torch.log1p(batch.y.view(-1, 1)))
+            z = batch.x[:, 4].long().to(device)
+            pos = batch.x[:, 0:3].float().to(device)
+            edge_index = batch.edge_index.to(device)
+            batch_idx = batch.batch.to(device)
+
+            predicted_train_energy = model(z, pos, edge_index, batch_idx)
+
+            loss = loss_func(predicted_train_energy, batch.y.view(-1, 1))
 
             optimizer.zero_grad()
             loss.backward()
@@ -532,14 +458,19 @@ def run_training():
         with torch.no_grad():
             for batch_test in test_loader:
 
-                predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
+                z = batch_test.x[:, 4].long().to(device)
+                pos = batch_test.x[:, 0:3].float().to(device)
+                edge_index = batch_test.edge_index.to(device)
+                batch_idx = batch_test.batch.to(device)
 
-                loss = loss_func(torch.log1p(predicted_test_energy), torch.log1p(batch_test.y.view(-1, 1)))
+                predicted_test_energy = model(z, pos, edge_index, batch_idx)
+
+                loss = loss_func(predicted_test_energy, batch_test.y.view(-1, 1))
                 test_loss += loss.item()
 
-                all_predicted.extend(predicted_test_energy.numpy())
+                all_predicted.extend(predicted_test_energy.cpu().numpy())
                 all_system_names.extend(batch_test.system_name)
-                all_true.extend(batch_test.y.numpy())
+                all_true.extend(batch_test.y.cpu().numpy())
 
         avg_train_loss = train_loss / len(train_loader)
         avg_test_loss = test_loss / len(test_loader)
@@ -572,15 +503,10 @@ def run_training():
     if save_option == 'y':
 
         hyperparameters = {
-            "node_dim": node_size,
-            "hidden_node_dim": node_hidden_size,
-            "output_node_dim": node_output_size,
-            "edge_dim": edge_size,
-            "hidden_edge_dim": edge_hidden_size,
-            "output_edge_dim": edge_output_size,
-            "hidden_gnn_dim1": hidden_size1,
-            "hidden_gnn_dim2": hidden_size2,
-            "output_gnn_dim": gnn_output_size
+            "layers": layers,
+            "nodes": nodes,
+            "neighbours": neighbours,
+            "embeddings": embeddings
         }  # Store the hyperparameters in a dictionary for saving.
 
         model_name = input('Input the model name: ')
@@ -617,6 +543,14 @@ def run_testing():
     for i, energy in enumerate(train_data['energy_output']):
         train_data['energy_output'][i] = -1 * train_data['energy_output'][i]
 
+    for i, graph in enumerate(train_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        train_data['node_features'][i] = graph_array.tolist()
+
     train_node_feats = extract_by_indices(train_data, 'node_features', train_indices)
     train_edge_feats = extract_by_indices(train_data, 'edge_features', train_indices)
     train_energies = extract_by_indices(train_data, 'energy_output', train_indices)
@@ -636,6 +570,14 @@ def run_testing():
 
     test_file_path = f"Energy Testing Data/{name}_energy_testing.csv"
     test_data = load_testing_data(test_file_path)
+
+    for i, graph in enumerate(test_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        test_data['node_features'][i] = graph_array.tolist()
 
     test_indices = list(range(len(test_data['node_features'])))
 
@@ -683,20 +625,13 @@ def run_testing():
 
     model_data = torch.load(model_file_path)  # Load the model and hyperparameters.
 
-    hyperparameters = model_data[
-        "hyperparameters"]  # Retrieve the hyperparameters and use them to initialize the model.
+    hyperparameters = model_data["hyperparameters"]
+    layers = hyperparameters["layers"]
+    nodes = hyperparameters["nodes"]
+    neighbours = hyperparameters["neighbours"]
+    embeddings = hyperparameters["embeddings"]
 
-    model = GNN(
-        node_dim=hyperparameters["node_dim"],
-        hidden_node_dim=hyperparameters["hidden_node_dim"],
-        output_node_dim=hyperparameters["output_node_dim"],
-        edge_dim=hyperparameters["edge_dim"],
-        hidden_edge_dim=hyperparameters["hidden_edge_dim"],
-        output_edge_dim=hyperparameters["output_edge_dim"],
-        hidden_gnn_dim1=hyperparameters["hidden_gnn_dim1"],
-        hidden_gnn_dim2=hyperparameters["hidden_gnn_dim2"],
-        output_gnn_dim=hyperparameters["output_gnn_dim"]
-    )
+    model = SimpleMACE(layers, nodes, neighbours, embeddings)
 
     model.to(device)
 
@@ -707,9 +642,14 @@ def run_testing():
     all_system_names = []
     with torch.no_grad():
         for batch_test in test_loader:
-            predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
+            z = batch_test.x[:, 4].long().to(device)
+            pos = batch_test.x[:, 0:3].float().to(device)
+            edge_index = batch_test.edge_index.to(device)
+            batch_idx = batch_test.batch.to(device)
 
-            all_predicted.extend(predicted_test_energy.numpy())
+            predicted_test_energy = model(z, pos, edge_index, batch_idx)
+
+            all_predicted.extend(predicted_test_energy.cpu().numpy())
             all_system_names.extend(batch_test.system_name)
 
     predicted_test_energy_denorm = energy_normaliser.inverse_transform(all_predicted)
@@ -720,6 +660,3 @@ def run_testing():
         print(f"{name:<30} | Predicted Energy: {float(pred):.6f} eV |")
 
     return pred
-
-
-run_training()

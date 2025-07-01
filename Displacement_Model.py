@@ -1,6 +1,5 @@
 import ast
 import os
-import csv
 import random
 import time
 import numpy as np
@@ -16,21 +15,7 @@ from torch_geometric.data import Data, DataLoader
 import matplotlib.pyplot as plt
 from tkinter import filedialog
 
-from Compound_Properties import node_edge_features
-
-import Energy_Model_Combined
-import Energy_Model_Compound
-import Energy_Model_H
-import Temperature_Model
-
-# if torch.cuda.is_available():
-#     device = torch.device("cuda")
-# elif torch.backends.mps.is_available():
-#     device = torch.device("mps")
-# else:
-#     device = torch.device("cpu")
-
-device = torch.device("cpu")
+device = torch.device("mps")
 
 print("Device:", device)
 
@@ -116,7 +101,7 @@ class FCNN_FeatureCombiner(nn.Module):
     def __init__(self, input_dim, hidden_size, output_dim):
         super(FCNN_FeatureCombiner, self).__init__()
 
-        self.input = nn.Linear(input_dim, hidden_size)
+        self.input = nn.Linear(input_dim, output_dim)
         self.fc1 = nn.Linear(hidden_size, output_dim)
         self.silu = nn.SiLU()
 
@@ -124,7 +109,7 @@ class FCNN_FeatureCombiner(nn.Module):
 
         x = self.input(x)
         x = self.silu(x)
-        x = self.fc1(x)
+        # x = self.fc1(x)
 
         return x
 
@@ -172,16 +157,14 @@ class GNN(nn.Module):
         self.node_feature_combiner = FCNN_FeatureCombiner(node_dim, hidden_node_dim, output_node_dim)
         self.edge_feature_combiner = FCNN_FeatureCombiner(edge_dim, hidden_edge_dim, output_edge_dim)
 
-        self.gnn1 = MyCustomGNNLayer(output_node_dim, output_edge_dim, hidden_gnn_dim1)
-        self.gnn2 = MyCustomGNNLayer(hidden_gnn_dim1, output_edge_dim, hidden_gnn_dim2)
-        self.gnn3 = MyCustomGNNLayer(hidden_gnn_dim2, output_edge_dim, hidden_gnn_dim2)
+        self.gnn1 = MyCustomGNNLayer(output_node_dim, output_edge_dim, hidden_gnn_dim2)
 
         self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
 
     def forward(self, node_features, edge_index, edge_features):
 
-        node_features = F.silu(self.node_feature_combiner(node_features))
-        edge_features = F.silu(self.edge_feature_combiner(edge_features))
+        node_features = F.relu(self.node_feature_combiner(node_features))
+        edge_features = F.relu(self.edge_feature_combiner(edge_features))
 
         def make_undirected(edge_index, edge_attr):
             edge_index_reversed = edge_index.flip(0)
@@ -192,11 +175,7 @@ class GNN(nn.Module):
         edge_index, edge_features = make_undirected(edge_index, edge_features)
 
         x = self.gnn1(node_features, edge_index, edge_features)
-        x = F.silu(x)
-        x = self.gnn2(x, edge_index, edge_features)
-        x = F.silu(x)
-        x = self.gnn3(x, edge_index, edge_features)
-        x = F.silu(x)
+        x = F.relu(x)
 
         displacement = self.fc_out(x)
 
@@ -248,76 +227,6 @@ def load_testing_data(csv_path):
     df = pd.read_csv(csv_path)
 
     def parse_column(col_name):
-        all_values = []
-        for i, value in enumerate(df[col_name]):
-
-            try:
-                if isinstance(value, str):
-                    # Replace smart quotes with normal quotes
-                    cleaned = value.replace("‘", "'").replace("’", "'").replace("“", '"').replace("”", '"')
-                    parsed_value = ast.literal_eval(cleaned)
-                else:
-                    parsed_value = value
-                all_values.append(parsed_value)
-            except (ValueError, SyntaxError) as e:
-                print(f"Error parsing {col_name} in row {i}: {e}")
-                return None
-        return all_values
-
-    system_names = df[df.columns[0]].tolist()  # First column
-
-    node_features = parse_column('Node Features Initial Combined')
-    edge_features = parse_column('Edge Features Initial Combined')
-    edge_indices = parse_column('Edge Indices Combined')
-    system_features = parse_column('Diffusion Input Features')
-    initial_coords = parse_column('Diffusion Initial Coords')
-    oxidation_states = parse_column('Oxidation States')
-
-    num_fixed_atoms = df.iloc[:, 7].astype(int).tolist()
-
-    return {
-        "system_names": system_names,
-        "node_features": node_features,
-        "edge_features": edge_features,
-        "edge_indices": edge_indices,
-        "system_features": system_features,
-        "initial_coords": initial_coords,
-        "num_fixed_atoms": num_fixed_atoms,
-        'oxidation_states': oxidation_states
-    }
-
-
-def load_energy_file(csv_path):
-    df = pd.read_csv(csv_path)
-
-    def parse_entry(col_name, fix_strings=False):
-        extracted = []
-        for i, val in enumerate(df[col_name]):
-            try:
-                triple = ast.literal_eval(val)
-                if isinstance(triple, list) and len(triple) >= 3:
-                    extracted.extend([triple[0], triple[1], triple[2]])
-                else:
-                    print(f"Warning: Row {i} in column '{col_name}' does not have 3 elements.")
-            except Exception as e:
-                print(f"Error parsing row {i} in column '{col_name}': {e}")
-        return extracted
-
-    node_features = parse_entry('Node Features (Triple)')
-    edge_features = parse_entry('Edge Features (Triple)')
-    edge_indices = parse_entry('Edge Indices (Triple)')
-
-    return {
-        "node_features": node_features,
-        "edge_features": edge_features,
-        "edge_indices": edge_indices
-    }, df
-
-
-def load_temp_file(csv_path):
-    df = pd.read_csv(csv_path)
-
-    def parse_entry(col_name):
         num_rows = len(df)
         all_graphs = []
 
@@ -332,15 +241,25 @@ def load_temp_file(csv_path):
 
         return all_graphs  # List of [graph_1_data, graph_2_data, ...]
 
-    node_features = parse_entry('Node Features Optimised Combined')
-    edge_features = parse_entry('Edge Features Optimised Combined')
-    edge_indices = parse_entry('Edge Indices Combined')
+    system_names = df[df.columns[0]].tolist()  # First column
+
+    node_features = parse_column('Node Features Initial Combined')
+    edge_features = parse_column('Edge Features Initial Combined')
+    edge_indices = parse_column('Edge Indices Combined')
+    system_features = parse_column('Diffusion Input Features')
+    initial_coords = parse_column('Diffusion Initial Coords')
+
+    num_fixed_atoms = df.iloc[:, 10].astype(int).tolist()
 
     return {
+        "system_names": system_names,
         "node_features": node_features,
         "edge_features": edge_features,
-        "edge_indices": edge_indices
-    }, df
+        "edge_indices": edge_indices,
+        "system_features": system_features,
+        "initial_coords": initial_coords,
+        "num_fixed_atoms": num_fixed_atoms
+    }
 
 
 def flatten_graph_data(graph_data):
@@ -369,14 +288,6 @@ def run_training():
         The GNN full model parameters are then saved for use in testing later.
     """
 
-    # root = tk.Tk()
-    # root.withdraw()                                                                                                     # Hide the root window.
-
-    # file_path = filedialog.askopenfilename(title="Select CSV File", filetypes=[("CSV Files", "*.csv")])                 # Open file dialog to select training CSV file.
-    # if not file_path:
-    #     print("No file selected. Exiting...")
-    #     return
-
     file_path = "diffusion_training.csv"
     data = load_training_data(file_path)  # Load the diffusion data
 
@@ -389,12 +300,25 @@ def run_training():
         disp = np.array(data['output_coords'][i]) - np.array(data['initial_coords'][i])
         data['displacements'].append(disp.tolist())
 
-    # Randomize and split before normalization
+    for i, edge_feat in enumerate(data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        graph_array = graph_array[:, :4]
+        data['node_features'][i] = graph_array.tolist()
+
     random.seed(int(time.time()))
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
-    num_train = 12
+    num_train = 27
     train_indices = graph_indices[:num_train]
     test_indices = graph_indices[num_train:]
 
@@ -419,7 +343,7 @@ def run_training():
     flat_output_coords_train, _ = flatten_graph_data(train_output_coords)
     flat_disps_train, _ = flatten_graph_data(train_disps)
 
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
+    node_normaliser.fit(flat_nodes_train, 4)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     coord_normaliser.fit(flat_coords_train, len(flat_coords_train[0]))
     output_coord_normaliser.fit(flat_coords_train, len(flat_output_coords_train[0]))
@@ -473,23 +397,23 @@ def run_training():
 
     epochs = 1000
 
-    node_size = 6
+    node_size = 4
     node_hidden_size = 128
     node_output_size = 256
 
-    edge_size = 2
-    edge_hidden_size = 64
-    edge_output_size = 128
+    edge_size = 1
+    edge_hidden_size = 128
+    edge_output_size = 256
 
-    hidden_size1 = 64
-    hidden_size2 = 128
+    hidden_size1 = 128
+    hidden_size2 = 1024
     gnn_output_size = 3
 
     model = GNN(node_size, node_hidden_size, node_output_size,
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=300, gamma=0.8)
 
     loss_train_list = []
@@ -497,7 +421,7 @@ def run_training():
 
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 6
+    batch_size_train = 27
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -562,7 +486,6 @@ def run_training():
 
                 start_idx = 0
                 movable_mask_global = torch.zeros(batch.y.size(0), dtype=torch.bool, device=batch.y.device)
-
                 for i, elements in enumerate(batch_elements):
                     N_fixed = batch_num_fixed[i].item()
                     num_atoms = len(elements)
@@ -667,9 +590,9 @@ def run_training():
             print("No model name entered. Exiting...")
             exit()
 
-        model_dir = "Diffusion GNN Models"                                                                              # Save the trained model in a folder along with its hyperparameters.
+        model_dir = "Coordinate GNN Models"                                                                             # Save the trained model in a folder along with its hyperparameters.
         os.makedirs(model_dir, exist_ok=True)
-        model_save_path = os.path.join(model_dir, f"diffusion_model_{model_name}.pt")
+        model_save_path = os.path.join(model_dir, f"coordinate_model_{model_name}.pt")
 
         model_data = {
             "model_state_dict": model.state_dict(),
@@ -696,95 +619,9 @@ def run_testing():
     #     print("No file selected. Exiting...")
     #     return
 
-    train_file_path = "diffusion_training.csv"
-    train_data = load_training_data(train_file_path)
+    file_path = "diffusion_testing.csv"
 
-    train_data['displacements'] = []
-    for i in range(len(train_data['output_coords'])):
-        train_data['output_coords'][i] = [[float(x) for x in line.split()[1:]] for line in train_data['output_coords'][i]]
-        train_data['initial_coords'][i] = [[float(x) for x in line.split()[1:]] for line in train_data['initial_coords'][i]]
-        disp = np.array(train_data['output_coords'][i]) - np.array(train_data['initial_coords'][i])
-        train_data['displacements'].append(disp.tolist())
-
-    train_indices = list(range(len(train_data['node_features'])))
-
-    def extract_by_indices(data_dict, key, indices):
-        return [data_dict[key][i] for i in indices]
-
-    train_node_feats = extract_by_indices(train_data, 'node_features', train_indices)
-    train_edge_feats = extract_by_indices(train_data, 'edge_features', train_indices)
-    train_coords = extract_by_indices(train_data, 'initial_coords', train_indices)
-    train_output_coords = extract_by_indices(train_data, 'output_coords', train_indices)
-    train_disps = extract_by_indices(train_data, 'displacements', train_indices)
-
-    node_normaliser = PreProcess()
-    edge_normaliser = PreProcess()
-    coord_normaliser = PreProcess()
-    output_coord_normaliser = PreProcess()
-    disp_normaliser = PreProcess()
-
-    flat_nodes_train, _ = flatten_graph_data(train_node_feats)
-    flat_edges_train, _ = flatten_graph_data(train_edge_feats)
-    flat_coords_train, _ = flatten_graph_data(train_coords)
-    flat_output_coords_train, _ = flatten_graph_data(train_output_coords)
-    flat_disps_train, _ = flatten_graph_data(train_disps)
-
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
-    edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
-    coord_normaliser.fit(flat_coords_train, len(flat_coords_train[0]))
-    output_coord_normaliser.fit(flat_coords_train, len(flat_output_coords_train[0]))
-    disp_normaliser.fit(flat_disps_train, len(flat_disps_train[0]))
-
-    name = 'NiO'
-
-    test_file_path = f"Diffusion Testing Data/{name}_diffusion_testing.csv"
-    test_data = load_testing_data(test_file_path)
-
-    element_lists = [[line.split()[0] for line in group] for group in test_data['initial_coords']]
-
-    for i in range(len(test_data['initial_coords'])):
-        test_data['initial_coords'][i] = [[float(x) for x in line.split()[1:]] for line in test_data['initial_coords'][i]]
-
-    test_indices = list(range(len(test_data['node_features'])))
-
-    test_node_feats = extract_by_indices(test_data, 'node_features', test_indices)
-    test_edge_feats = extract_by_indices(test_data, 'edge_features', test_indices)
-    test_coords = extract_by_indices(test_data, 'initial_coords', test_indices)
-
-    flat_nodes_test, test_node_sizes = flatten_graph_data(test_node_feats)
-    flat_edges_test, test_edge_sizes = flatten_graph_data(test_edge_feats)
-    flat_coords_test, test_coord_sizes = flatten_graph_data(test_coords)
-
-    node_features_norm_flat = node_normaliser.transform(flat_nodes_test)
-    edge_features_norm_flat = edge_normaliser.transform(flat_edges_test)
-    initial_coords_norm_flat = coord_normaliser.transform(flat_coords_test)
-
-    node_features_norm = split_back(node_features_norm_flat, test_node_sizes)
-    edge_features_norm = split_back(edge_features_norm_flat, test_edge_sizes)
-    initial_coords_norm = split_back(initial_coords_norm_flat, test_coord_sizes)
-
-    edge_indices = [torch.tensor(ei, dtype=torch.long).T.to(device) for ei in test_data['edge_indices']]
-
-    graph_list = []
-    for i in range(len(node_features_norm)):
-        data_obj = Data(
-            x=torch.tensor(node_features_norm[i], dtype=torch.float).to(device),
-            edge_index=edge_indices[i],
-            edge_attr=torch.tensor(edge_features_norm[i], dtype=torch.float).to(device),
-            input_coords=torch.tensor(initial_coords_norm[i], dtype=torch.float).to(device))
-
-        data_obj.system_name = test_data['system_names'][i]
-        data_obj.elements = element_lists[i]
-        data_obj.num_fixed = test_data['num_fixed_atoms'][i]
-        graph_list.append(data_obj)
-
-    test_graphs = [graph_list[i] for i in test_indices]
-
-    test_loader = DataLoader(test_graphs, 1, shuffle=False)
-
-    print("\nTest system:")
-    for g in test_graphs:
-        print(" -", g.system_name)
+    data = load_testing_data(file_path)
 
     model_dir = "Coordinate GNN Models"                                                                                 # Select the model to test.
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
@@ -812,160 +649,20 @@ def run_testing():
         output_gnn_dim=hyperparameters["output_gnn_dim"]
     )
 
-    model.to(device)
-
     model.load_state_dict(model_data["model_state_dict"])                                                               # Load the state_dict (weights).
     model.eval()                                                                                                        # Set the model to evaluation mode.
 
-    all_predicted_coords = []
-    all_elements = []
-    all_names = []
-
     with torch.no_grad():
-        for batch in test_loader:
-            batch = batch.to(device)
-            batch_elements = batch.elements
-            batch_num_fixed = batch.num_fixed
+        node_features = data["node_features"]
+        edge_index = data["edge_indices"]
+        edge_attr = data["edge_features"]
 
-            predicted_disp = model(batch.x, batch.edge_index, batch.edge_attr)
+        predicted_coords = model(node_features, edge_index, edge_attr)
 
-            start_idx = 0
-            movable_mask_global = torch.zeros(batch.input_coords.size(0), dtype=torch.bool, device=device)
+        print("Predicted Optimised Coordinates: ", predicted_coords)
 
-            for i, elements in enumerate(batch_elements):
-                N_fixed = batch_num_fixed[i].item()
-                num_atoms = len(elements)
-                end_idx = start_idx + num_atoms
+    print("Testing completed.")
 
-                movable_mask = torch.tensor(
-                    [e == 'H' and idx >= N_fixed for idx, e in enumerate(elements)],
-                    dtype=torch.bool,
-                    device=device
-                )
 
-                movable_mask_global[start_idx:end_idx].copy_(movable_mask)
-                start_idx = end_idx
-
-            initial_coords_norm = batch.input_coords.clone()
-            initial_coords = coord_normaliser.inverse_process(initial_coords_norm.cpu().numpy())
-            final_disp = disp_normaliser.inverse_process(predicted_disp.cpu().numpy())
-
-            initial_coords = torch.tensor(initial_coords, dtype=torch.float, device=device)
-            final_disp = torch.tensor(final_disp, dtype=torch.float, device=device)
-
-            start_idx = 0
-            for i, elements in enumerate(batch_elements):
-                N_fixed = batch_num_fixed[i].item()
-                num_atoms = len(elements)
-                end_idx = start_idx + num_atoms
-
-                movable_mask = torch.tensor(
-                    [e == 'H' and idx >= N_fixed for idx, e in enumerate(elements)],
-                    dtype=torch.bool,
-                    device=device
-                )
-
-                init = initial_coords[start_idx:end_idx]
-                disp = final_disp[start_idx:end_idx]
-
-                pred_coords = init.clone()
-                pred_coords[movable_mask] = init[movable_mask] + disp[movable_mask]
-
-                all_predicted_coords.append(pred_coords)
-                all_elements.append(elements)
-                all_names.append(batch.system_name[i])
-
-                start_idx = end_idx
-
-    predicted_xyz = []
-
-    for i, (elements, coords) in enumerate(zip(all_elements, all_predicted_coords)):
-        filename = f"Predicted Coords TESTING/{name}_predicted.xyz"
-
-        xyz_string = f"{len(elements)}\n"
-        xyz_string += "0 1\n"
-
-        for elem, coord in zip(elements, coords):
-            xyz_string += f"{elem} {coord[0]:.6f} {coord[1]:.6f} {coord[2]:.6f}\n"
-            xyz_line = f"{elem} {coord[0]:.6f} {coord[1]:.6f} {coord[2]:.6f}"
-            predicted_xyz.append(xyz_line)
-
-        with open(filename, "w") as f:
-            f.write(xyz_string)
-
-    print("Predicted Optimised XYZ: ", predicted_xyz)
-
-    print('\n Creating Energy and Temperature Testing Files...')
-
-    node_features_opt_pred_comb, edge_features_opt_pred_comb = node_edge_features(predicted_xyz, test_data['edge_indices'][0],
-                                                                          test_data['oxidation_states'],
-                                                                          test_data['num_fixed_atoms'][0], 0)
-
-    print('Predicted Optimised Node Features: ', node_features_opt_pred_comb)
-    print('Predicted Optimised Edge Features: ', edge_features_opt_pred_comb)
-
-    print(test_data['num_fixed_atoms'])
-
-    H_opt_pred_xyz = predicted_xyz[test_data['num_fixed_atoms'][0]:]  # Extract the optimised hydrogen positions.
-    print("H Opt XYZ: ", H_opt_pred_xyz)
-
-    energy_file_path = f"Energy Testing Data/{name}_energy_testing.csv"
-    temp_file_path = f"Temperature Testing Data/{name}_temperature_testing.csv"
-
-    energy_data, df_energy = load_energy_file(energy_file_path)
-    temp_data, df_temp = load_temp_file(temp_file_path)
-
-    node_features_opt_pred_H, edge_features_opt_pred_H = node_edge_features(H_opt_pred_xyz, energy_data['edge_indices'][2],
-                                                                  test_data['oxidation_states'],
-                                                                  test_data['num_fixed_atoms'][0],
-                                                                  1)
-
-    print('Predicted Optimised H Alone Node Features: ', node_features_opt_pred_H)
-    print('Predicted Optimised H Alone Edge Features: ', edge_features_opt_pred_H)
-
-    df_temp.loc[0, "Node Features Optimised Combined"] = str(node_features_opt_pred_comb)
-    df_temp.loc[0, "Edge Features Optimised Combined"] = str(edge_features_opt_pred_comb)
-
-    df_temp.to_csv(temp_file_path, index=False)
-
-    old_node_features = energy_data['node_features']
-    old_edge_features = energy_data['edge_features']
-
-    new_node_features_energy = [
-        node_features_opt_pred_comb,  # Combined (predicted)
-        old_node_features[1],  # Keep existing crystal features
-        node_features_opt_pred_H  # Hydrogen (predicted)
-    ]
-
-    new_edge_features_energy = [
-        edge_features_opt_pred_comb,  # Combined (predicted)
-        old_edge_features[1],  # Keep existing crystal features
-        edge_features_opt_pred_H  # Hydrogen (predicted)
-    ]
-
-    df_energy.loc[0, "Node Features (Triple)"] = str(new_node_features_energy)
-    df_energy.loc[0, "Edge Features (Triple)"] = str(new_edge_features_energy)
-
-    df_energy.to_csv(energy_file_path, index=False)
-
-    print(f"Updated {name} testing file successfully.")
-
-    energy_choice = input(f'Do you want to predict the energies for {name}? y/n: ')
-
-    if energy_choice == 'y':
-        pred_combined_energy = Energy_Model_Combined.run_testing()
-        pred_compound_energy = Energy_Model_Compound.run_testing()
-        pred_H_energy = Energy_Model_H.run_testing()
-
-        for comb, compound, H in zip(pred_combined_energy, pred_compound_energy, pred_H_energy):
-            adsorption_energy = comb - (compound + H)
-
-            print(f"{name:<30} | Predicted Adsorption Energy: {float(adsorption_energy):.6f} eV |")
-
-    temp_choice = input(f'Do you want to predict adsorption & desorption temperatures for {name}? y/n: ')
-
-    if temp_choice == 'y':
-        ads_prediction, des_prediction = Temperature_Model.run_testing()
-
-        print(f"{name:<30} | Predicted Adsorption Temperature: {ads_prediction:<10.6f}")
-        print(f"{'':<30} | Predicted Desorption Temperature: {des_prediction:<10.6f}")
+# run_training()
+# run_testing()

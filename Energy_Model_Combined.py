@@ -6,24 +6,14 @@ import random
 import time
 
 import torch
-import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
-from torch_geometric.nn import global_mean_pool
-from torch_geometric.nn import global_add_pool
+from torch_geometric.nn import GlobalAttention
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
-
-# if torch.cuda.is_available():
-#     device = torch.device("cuda")
-# elif torch.backends.mps.is_available():
-#     device = torch.device("mps")
-# else:
-#     device = torch.device("cpu")
 
 device = torch.device("cpu")
 
@@ -97,9 +87,15 @@ class GNN(nn.Module):
 
         self.gcn1 = MyCustomGNNLayer(output_node_dim, output_edge_dim, hidden_gnn_dim1)
         self.gcn2 = MyCustomGNNLayer(hidden_gnn_dim1, output_edge_dim, hidden_gnn_dim2)
-        self.gcn3 = MyCustomGNNLayer(hidden_gnn_dim2, output_edge_dim, hidden_gnn_dim2)
 
         self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
+
+        self.gate_nn = nn.Sequential(
+            nn.Linear(hidden_gnn_dim2, 1),
+            nn.Sigmoid()
+        )
+
+        self.attention_pool = GlobalAttention(gate_nn=self.gate_nn)
 
     def forward(self, node_features, edge_index, edge_features, batch):
         """
@@ -127,11 +123,10 @@ class GNN(nn.Module):
         edge_index, edge_features = make_undirected(edge_index, edge_features)
 
         x = self.gcn1(node_features, edge_index, edge_features)
-        x = F.relu(x)
+        x = F.silu(x)
         x = self.gcn2(x, edge_index, edge_features)
-        x = F.relu(x)
 
-        x = global_mean_pool(x, batch)  # shape: [num_graphs, hidden_dim]
+        x = self.attention_pool(x, batch)
 
         output = self.fc_out(x)
 
@@ -335,6 +330,20 @@ def run_training():
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
+    for i, edge_feat in enumerate(data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        graph_array = graph_array[:, :4]
+        data['node_features'][i] = graph_array.tolist()
+
     num_train = len(graph_indices) - 1
     print('No. of training graphs: ', num_train)
     train_indices = graph_indices[:num_train]
@@ -357,7 +366,7 @@ def run_training():
     flat_nodes_train, _ = flatten_graph_data(train_node_feats)
     flat_edges_train, _ = flatten_graph_data(train_edge_feats)
 
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
+    node_normaliser.fit(flat_nodes_train, 4)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     energy_normaliser.fit(train_energies)
 
@@ -395,27 +404,19 @@ def run_training():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    # print("\nTrain systems with normalized energies:")
-    # for i in train_indices:
-    #     system_name = data['system_names'][i]
-    #     energies = data['energy_output'][i]
-    #     energy_norm = float(energies_norm[i])
-    #     print(f"{system_name:<30} | Un-normalised Energy: {energies:.6f} | Normalised Energy: {energy_norm:.6f}")
+    epochs = 400
+    batch_size = 80  # Adjust as needed
 
-    epochs = 700
-
-    batch_size = 4  # Adjust as needed
-
-    node_size = 6
+    node_size = 4
     node_hidden_size = 128
     node_output_size = 256
 
-    edge_size = 2
+    edge_size = 1
     edge_hidden_size = 128
-    edge_output_size = 128
+    edge_output_size = 512
 
-    hidden_size1 = 64
-    hidden_size2 = 128
+    hidden_size1 = 128
+    hidden_size2 = 512
     gnn_output_size = 1
 
     model = GNN(node_size, node_hidden_size, node_output_size,
@@ -423,13 +424,11 @@ def run_training():
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=300, gamma=0.8)
 
     loss_train_list = []
     loss_test_list = []
 
-    # loss_func = nn.SmoothL1Loss()
-    loss_func = nn.MSELoss()
+    loss_func = nn.SmoothL1Loss()
 
     train_loader = DataLoader(train_graphs, batch_size, shuffle=True)
     test_loader = DataLoader(test_graphs, batch_size, shuffle=False)
@@ -442,8 +441,7 @@ def run_training():
 
             predicted_train_energy = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
 
-            # loss = loss_func(predicted_train_energy, batch.y.view(-1, 1))
-            loss = loss_func(torch.log1p(predicted_train_energy), torch.log1p(batch.y.view(-1, 1)))
+            loss = loss_func(predicted_train_energy, batch.y.view(-1, 1))
 
             optimizer.zero_grad()
             loss.backward()
@@ -461,8 +459,7 @@ def run_training():
 
                 predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
 
-                # loss = loss_func(predicted_test_energy, batch_test.y.view(-1, 1))
-                loss = loss_func(torch.log1p(predicted_test_energy), torch.log1p(batch_test.y.view(-1, 1)))
+                loss = loss_func(predicted_test_energy, batch_test.y.view(-1, 1))
                 test_loss += loss.item()
 
                 all_predicted.extend(predicted_test_energy.numpy())

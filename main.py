@@ -2,7 +2,7 @@ import csv
 
 from Compound_Database import set_train_materials, set_test_materials
 from Training_Creator_New import data_creator
-import Diffusion_Model
+import Displacement_Model
 import Energy_Model_Combined
 import Energy_Model_Compound
 import Energy_Model_H
@@ -162,7 +162,7 @@ if run_choice == '1':
                 print(f"Error processing {compound}: {e}")
 
 elif run_choice == '2':
-    Diffusion_Model.run_testing()
+    Displacement_Model.run_testing()
 
 elif run_choice == '3':
 
@@ -170,7 +170,7 @@ elif run_choice == '3':
                          "3) Energy Compound Model, 4) Energy H Model or 5) Temperature Model: ")
 
     if model_choice == '1':
-        Diffusion_Model.run_training()
+        Displacement_Model.run_training()
     elif model_choice == '2':
         Energy_Model_Combined.run_training()
     elif model_choice == '3':
@@ -191,7 +191,7 @@ elif run_choice == '4':
                          "4) Energy H model or 5) Temperature Model")
 
     if model_choice == '1':
-        Diffusion_Model.run_testing()
+        Displacement_Model.run_testing()
     elif model_choice == '2':
         Energy_Model_Combined.run_testing()
     elif model_choice == '3':

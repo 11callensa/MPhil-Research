@@ -6,41 +6,19 @@ import random
 import time
 
 import torch
-import torch.optim as optim
-from torch_optimizer import AdaBelief
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
-from torch_geometric.nn import global_mean_pool
-from torch_geometric.nn import global_add_pool
+from torch_geometric.nn import GlobalAttention
+from torch_geometric.nn import SchNet
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
 
-# if torch.cuda.is_available():
-#     device = torch.device("cuda")
-# elif torch.backends.mps.is_available():
-#     device = torch.device("mps")
-# else:
-#     device = torch.device("cpu")
-
 device = torch.device("cpu")
 
 print("Device:", device)
-
-
-class LogCoshLoss(nn.Module):                                                                                           # Setup the log-cosh loss function.
-    def forward(self, pred, target):
-        """
-            Takes in predicted and target values and calculates the log-cosh loss.
-
-            :param pred: Predicted values.
-            :param target: Target (true) values.
-            :return: The log-cosh loss.
-        """
-        return torch.mean(torch.log(torch.cosh(pred - target + 1e-12)))
 
 
 class FCNN_FeatureCombiner(nn.Module):
@@ -115,6 +93,8 @@ class GNN(nn.Module):
 
         self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
 
+        self.global_attention = GlobalAttention(gate_nn=nn.Linear(hidden_gnn_dim2, 1))
+
         self.relu = nn.ReLU()
 
     def forward(self, node_features, edge_index, edge_features, batch):
@@ -147,11 +127,31 @@ class GNN(nn.Module):
         x = self.gcn2(x, edge_index, edge_features)
         x = F.relu(x)
 
-        x = global_mean_pool(x, batch)  # shape: [num_graphs, hidden_dim]
+        x = self.global_attention(x, batch)
 
         output = self.fc_out(x)
 
         return output
+
+
+class GNN_SchNet(nn.Module):
+    def __init__(self, hidden_channels=128):
+        super().__init__()
+        self.schnet = SchNet(hidden_channels=hidden_channels)  # returns node embeddings
+
+        self.fc = nn.Sequential(
+            nn.Linear(1, 128),
+            nn.SiLU(),
+            nn.Linear(128, 2)
+        )
+
+    def forward(self, z, pos, batch):
+        # Get node embeddings [num_nodes, hidden_channels]
+        graph_embedding = self.schnet(z, pos, batch)
+
+        out = self.fc(graph_embedding)
+
+        return out
 
 
 def load_training_data(csv_path):
@@ -336,6 +336,20 @@ def run_training():
     def extract_by_indices(data_dict, key, indices):
         return [data_dict[key][i] for i in indices]
 
+    for i, edge_feat in enumerate(data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        graph_array = graph_array[:, :4]
+        data['node_features'][i] = graph_array.tolist()
+
     train_node_feats = extract_by_indices(data, 'node_features', train_indices)
     train_edge_feats = extract_by_indices(data, 'edge_features', train_indices)
 
@@ -356,7 +370,7 @@ def run_training():
     flat_ads_train, _ = flatten_graph_data(adsorption_temps_train)
     flat_des_train, _ = flatten_graph_data(desorption_temps_train)
 
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
+    node_normaliser.fit(flat_nodes_train, 4)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     ads_normaliser.fit(flat_ads_train)
     des_normaliser.fit(flat_des_train)
@@ -414,32 +428,30 @@ def run_training():
 
     epochs = 700
 
-    node_size = 6
+    node_size = 4
     node_hidden_size = 128
     node_output_size = 256
 
-    edge_size = 2
+    edge_size = 1
     edge_hidden_size = 128
-    edge_output_size = 128
+    edge_output_size = 256
 
-    hidden_size1 = 128
-    hidden_size2 = 256
+    hidden_size1 = 256
+    hidden_size2 = 512
     gnn_output_size = 2
 
     model = GNN(node_size, node_hidden_size, node_output_size,
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = AdaBelief(model.parameters(), lr=0.0001, weight_decay=1e-06)
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     loss_train_list = []
     loss_test_list = []
 
-    # loss_func = nn.MSELoss()
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 12
+    batch_size_train = 27
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -450,10 +462,10 @@ def run_training():
         train_loss = 0.0
 
         for batch in train_loader:
+
             predicted_train_temps = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
 
-            loss = loss_func(torch.log1p(predicted_train_temps), torch.log1p(batch.y.view(-1, 2)))
-            # loss = loss_func(predicted_train_temps, batch.y.view(-1, 2))
+            loss = loss_func(predicted_train_temps, batch.y.view(-1, 2))
 
             optimizer.zero_grad()
             loss.backward()
@@ -472,10 +484,10 @@ def run_training():
 
         with torch.no_grad():
             for batch_test in test_loader:
-                predicted_test_temps = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr,
-                                             batch_test.batch)
-                loss = loss_func(torch.log1p(predicted_test_temps), torch.log1p(batch_test.y.view(-1, 2)))
-                # loss = loss_func(predicted_test_temps, batch_test.y.view(-1, 2))
+
+                predicted_test_temps = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
+
+                loss = loss_func(predicted_test_temps, batch_test.y.view(-1, 2))
                 test_loss += loss.item()
 
                 predicted_np = predicted_test_temps.cpu().numpy().reshape(-1, 2)
