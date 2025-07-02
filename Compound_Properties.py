@@ -43,6 +43,7 @@ def get_spin(element_list):
         'Ag': 1,  # Silver
         'Au': 1,  # Gold
         'Si': 2,  # Silicon
+        'Sn': 2,
         'Ru': 4,  # Ruthenium
         'Ir': 3,  # Iridium
         'Rh': 1,  # Rhodium

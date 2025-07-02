@@ -2,10 +2,12 @@ import time
 import os
 import numpy as np
 import ctypes
+import cupy as cp
 
 from collections import Counter
 from pyscf import pbc
 from pyscf.pbc import gto, dft
+
 
 # from pyscf import lib, gto, dft
 from pyscf.geomopt.geometric_solver import optimize
@@ -16,7 +18,9 @@ from Compound_Properties import get_spin
 from External_Saving import save_opt_xyz, save_opt_csv
 
 _loaderpath = 'libdftd3-master/lib'
-libdftd3 = np.ctypeslib.load_library('libdftd3.so', _loaderpath)
+# libdftd3 = np.ctypeslib.load_library('libdftd3.so', _loaderpath)
+libdftd3 = None
+
 
 init_guess = ['hcore', 'minao', 'atom']
 
@@ -148,7 +152,7 @@ def optimise_geometry(atoms, num_fixed, name):
     mf.conv_tol = 1e-4
 
     def write_constraints(num_fixed, name):
-        os.makedirs("Constraints", exist_ok=True)  # Ensure folder exists
+        os.makedirs("../Constraints", exist_ok=True)  # Ensure folder exists
         filename = f"Constraints/constraints_{name}.txt"
 
         with open(filename, "w") as f:
@@ -220,20 +224,21 @@ def calculate_new_energy(atoms):
     ])
 
     cell.atom = atoms
+    cell.mesh = [30, 30, 30]  # adjust depending on desired accuracy
 
     start_time = time.time()
 
     cell.build()
 
     # mf = dft.RKS(mol).density_fit(auxbasis='def2-svp')
-    mf = dft.KRKS(cell)  # K-point restricted Kohn-Sham DFT
+    mf = dft.RKS(cell)  # K-point restricted Kohn-Sham DFT
 
     mf.conv_tol = 1e-4
     mf.level_shift = 0.5
     mf.grids.level = 0
 
     mf.xc = 'pbe'
-    mf.init_guess = 'hcore'
+    mf.init_guess = 'minao'
     # mf.disp = 'd3bj'
 
     mf.direct_scf = True
@@ -282,6 +287,8 @@ def xyz_to_list(filename):
 
 coords = xyz_to_list('Cu_alone.xyz')
 print(coords)
+
+coords = ['Cu 1 0 0']
 
 energy = calculate_new_energy(coords)
 print('Energy eV: ', energy)

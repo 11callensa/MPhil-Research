@@ -250,13 +250,80 @@ def rotater(xyz):
     return rotated_coords
 
 
+# def rotater(xyz):
+#     # Parse elements and coordinates
+#     elements = []
+#     coords = []
+#
+#     for entry in xyz:
+#         parts = entry.split()
+#         elements.append(parts[0])
+#         coords.append([float(x) for x in parts[1:]])
+#
+#     coords = np.array(coords)
+#
+#     # Find 5 atoms that are most coplanar
+#     best_group = None
+#     best_score = float('inf')
+#
+#     for combo in combinations(range(len(coords)), 5):
+#         pts = coords[list(combo)]
+#         centroid = np.mean(pts, axis=0)
+#         centered = pts - centroid
+#         _, _, vh = np.linalg.svd(centered)
+#         normal = vh[-1]
+#         distances = np.abs(centered @ normal)
+#         score = np.mean(distances)
+#         if score < best_score:
+#             best_score = score
+#             best_group = combo
+#             best_normal = normal
+#
+#     # Normalize normal vector
+#     normal = best_normal / np.linalg.norm(best_normal)
+#     z_axis = np.array([0, 0, 1])
+#
+#     # Rotation matrix to align normal with Z-axis
+#     v = np.cross(normal, z_axis)
+#     s = np.linalg.norm(v)
+#     c = np.dot(normal, z_axis)
+#
+#     if s == 0:
+#         rot_matrix = np.eye(3)
+#     else:
+#         vx = np.array([[    0, -v[2],  v[1]],
+#                        [ v[2],     0, -v[0]],
+#                        [-v[1],  v[0],     0]])
+#         rot_matrix = np.eye(3) + vx + (vx @ vx) * ((1 - c) / (s**2))
+#
+#     rotated_coords = (rot_matrix @ coords.T).T
+#
+#     # Step: Check average z of the 5 plane atoms vs the rest
+#     plane_z_avg = np.mean(rotated_coords[list(best_group), 2])
+#     overall_z_avg = np.mean(rotated_coords[:, 2])
+#
+#     # If plane is below center, flip the whole shape
+#     if plane_z_avg < overall_z_avg:
+#         rotated_coords[:, 2] *= -1
+#
+#     # Now translate so plane atoms are at the top
+#     coplanar_z = rotated_coords[list(best_group), 2]
+#     max_z = np.max(coplanar_z)
+#     z_shift = np.max(rotated_coords[:, 2]) - max_z
+#     rotated_coords[:, 2] += z_shift
+#
+#     # Format output
+#     output = [f"{el} {x:.6f} {y:.6f} {z:.6f}" for el, (x, y, z) in zip(elements, rotated_coords)]
+#
+#     return output
+
+
 def tiler(atoms_list):
     """
-    Tiles the atomic coordinates in either a 2x2, 3x1, or 2x1 pattern.
+    Tiles the atomic coordinates in a specified grid pattern.
 
     Parameters:
     - atoms_list: List of strings with format "Element x y z"
-    - mode: '2x2', '3x1', or '2x1'
 
     Returns:
     - tiled_atoms: List of strings in same format, tiled accordingly
@@ -278,29 +345,24 @@ def tiler(atoms_list):
     dx = max_coords[0] - min_coords[0]
     dy = max_coords[1] - min_coords[1]
 
-    mode = input('Would you like to tile in the form 1) 3x1 or 2) 2x2?: ')
+    mode = input('Choose tiling mode: 1) 3x1  2) 2x2  3) 2x1  4) 4x4  5) 2x3: ')
 
     # Define shift vectors based on mode
     if mode == '2x2':
-        shift_vectors = [
-            np.array([0, 0, 0]),
-            np.array([dx, 0, 0]),
-            np.array([0, dy, 0]),
-            np.array([dx, dy, 0])
-        ]
+        shift_vectors = [np.array([i * dx, j * dy, 0])
+                         for i in range(2) for j in range(2)]
     elif mode == '3x1':
-        shift_vectors = [
-            np.array([0, 0, 0]),
-            np.array([dx, 0, 0]),
-            np.array([2 * dx, 0, 0])
-        ]
+        shift_vectors = [np.array([i * dx, 0, 0]) for i in range(3)]
     elif mode == '2x1':
-        shift_vectors = [
-            np.array([0, 0, 0]),
-            np.array([dx, 0, 0])
-        ]
+        shift_vectors = [np.array([i * dx, 0, 0]) for i in range(2)]
+    elif mode == '4x4':
+        shift_vectors = [np.array([i * dx, j * dy, 0])
+                         for i in range(4) for j in range(4)]
+    elif mode == '2x3':
+        shift_vectors = [np.array([i * dx, j * dy, 0])
+                         for i in range(2) for j in range(3)]
     else:
-        raise ValueError("Invalid mode. Choose '2x2', '3x1', or '2x1'.")
+        raise ValueError("Invalid mode. Choose '2x2', '3x1', '2x1', '4x4', or '2x3'.")
 
     # Generate tiled atoms
     tiled_atoms = []
@@ -313,6 +375,8 @@ def tiler(atoms_list):
     tiled_atoms.sort(key=lambda atom: atom.split()[0])
 
     return tiled_atoms
+
+
 
 
 def site_finder(layer_atoms, min_bond=1.0, max_bond=3.0, z_tol=1e-3):
@@ -431,8 +495,17 @@ def place_hydrogen(tiled_xyz, adsorption_sites, coverage, hydrogen_bond, height_
         print(f"⚠️ Warning: Only {len(all_sites)} adsorption sites available. Reducing H₂ count.")
         num_H2 = len(all_sites)
 
-    step = len(all_sites) / num_H2
-    candidate_indices = [int(i * step) for i in range(len(all_sites))]
+    # step = len(all_sites) / num_H2
+    # candidate_indices = [int(i * step) for i in range(len(all_sites))]
+
+    # Compute surface center (xy-center of top surface atoms)
+    surface_positions = [np.array([float(line.split()[1]), float(line.split()[2])]) for line in top_surface_atoms]
+    surface_center = np.mean(surface_positions, axis=0)
+
+    # Sort all adsorption sites by distance to the surface center
+    all_sites_sorted = sorted(all_sites, key=lambda site: np.linalg.norm(np.array(site[:2]) - surface_center))
+
+    candidate_indices = list(range(len(all_sites_sorted)))
 
     placed_H_coords = []
     used_indices = set()
@@ -446,7 +519,9 @@ def place_hydrogen(tiled_xyz, adsorption_sites, coverage, hydrogen_bond, height_
             i += 1
             continue
 
-        site = all_sites[idx]
+        # site = all_sites[idx]
+        site = all_sites_sorted[idx]
+
         base_pos = np.array(site) + np.array([0, 0, height_above])
         offset = np.array([hydrogen_bond, 0, 0])
         h1 = base_pos - offset / 2

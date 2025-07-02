@@ -18,36 +18,40 @@ def set_train_materials():
 
     # DONE compound = {'TiO2-A': 'mp-390'}
     # DONE compound = {'TiO2-R': 'mp-1041565'}
-
     # compound = {'Pt': 'mp-126'}
-    compound = {'Ni': 'mp-23'}
-                # 'Pd': 'mp-2',
+    # DONE compound = {'Ni': 'mp-23'}
+    # DONE compound = {'Pd': 'mp-2'}
+    # DONE compound = {'PdO': 'mp-1336'}
     # DONE compound = {'MgO': 'mp-1265'}
     # DONE compound = {'Al2O3': 'mp-1143'}
-                # 'LaCrO3': 'mp-19281',
+    # DONE compound = {'LaCrO3': 'mp-18841'}
+    # DONE compound = {'LaNiO3': 'mp-1075921'}
+    # DONE compound = {'LaFeO3': 'mp-552676'}
+    # compound = {'LaCoO3': 'mp-573180'}
     # DONE compound = {'GaN': 'mp-830'}
     # compound = {'WC': 'mp-1894'}
     # DONE compound = {'TiC': 'mp-631'}
     # compound = {'Co2O4': 'mp-18748'}
     # DONE compound = {'ZnO': 'mp-1986'}
-    # compound = {'ZrO2': 'mp-2858'}
-                # 'Y2O3': 'mp-2652',
-                # 'Cr2O3': 'mp-19399',
-                # 'W': 'mp-91',
-                # 'CuCrO4': 'mp-504927',
-    # compound = {'Au': 'mp-81'}
+    # DONE compound = {'ZrO2': 'mp-2858'}
+    # DONE compound = {'Y2O3': 'mp-673247'}
+    # DONE compound =  {'Cr2O3': 'mp-776873'}
+    # DONE compound = {'W': 'mp-91'}
+    # DONE compound = {'CuCr2O4': 'mp-1103973'}
+    # DONE compound = {'Au': 'mp-81'}
     # DONE compound = {'Cu': 'mp-30'}
-                # 'Ag': 'mp-8566',
+    # DONE compound = {'Ag': 'mp-124'}
     # DONE compound = {'SiC':'mp-7631'}
-                # 'Ru': 'mp-33',
-                # 'Ir': 'mp-101',
-                # 'Rh': 'mp-74',
+    # DONE compound = {'Ru': 'mp-8639'}
+    # DONE compound = {'Ir': 'mp-101'}
+    # DONE compound = {'Rh': 'mp-74'}
     # DONE compound = {'Al': 'mp-134'}
-                # 'Ta': 'mp-569794',
+    compound = {'Ta': 'mp-50'}
     # compound = {'Co': 'mp-102'}
-                # 'Nb': 'mp-75',
-    # compound = {'GaAs': 'mp-2534'}
-                # 'Re': 'mp-1186901'}
+    # DONE compound = {'Nb': 'mp-75'}
+    # DONE compound = {'GaAs': 'mp-2534'}
+    # compound = {'Re': 'mp-1186901'}
+    # DONE compound = {'SnO2':'mp-856'}
 
     return hydrogen, compound
 

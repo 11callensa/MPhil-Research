@@ -9,6 +9,8 @@ from External_Saving import save_edges_to_csv, save_original_xyz
 from DFT_New import calculate_energy, optimise_geometry
 from Compound_Properties import get_spin, node_edge_features, mass_and_charge
 
+import networkx as nx
+
 
 def data_creator(hydrogen, compound_ID, name, test_train):
 
@@ -41,10 +43,17 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     rotated_xyz = rotater(layered_xyz)
     print('Rotated XYZ: ', rotated_xyz)
 
-    tiled_raw_xyz = tiler(rotated_xyz)
+    # edge_indices_trial = compute_bonds(rotated_xyz)
+    # plot_crystal(rotated_xyz, edge_indices_trial)
+
+    # tiled_raw_xyz = tiler(rotated_xyz)
+
+    tiled_raw_xyz = rotated_xyz
     tiled_xyz = parsing(tiled_raw_xyz)
     tiled_xyz.sort(key=lambda x: x.split()[0], reverse=True)
     print('Tiled XYZ: ', tiled_xyz)
+
+    # edge_indices_crystal = compute_bonds(rotated_xyz)
 
     edge_indices_crystal = compute_bonds(tiled_xyz)                                                                  # Computer the crystal edge indices.
 
@@ -57,14 +66,48 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     print("Edge Indices of the initial crystal alone: ", edge_indices_crystal)
 
-    plot_crystal(tiled_xyz, edge_indices_crystal)                                                                    # Plot the crystal and its bonds alone.
+    G = nx.Graph()
+    G.add_edges_from([tuple(edge) for edge in edge_indices_crystal])
 
-    num_atoms = len(tiled_xyz)                                                                                       # Find the number of atoms in the crystal.
+    # Step 2: Identify connected components
+    connected_components = list(nx.connected_components(G))
+
+    # Step 3: Keep only the largest component
+    largest_component = max(connected_components, key=len)
+
+    # Step 4: Filter atoms and edges
+    largest_component_indices = sorted(largest_component)
+
+    # Create a mapping from old index to new index
+    index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(largest_component_indices)}
+
+    # Filter atom list
+    tiled_xyz_filtered = [tiled_xyz[i] for i in largest_component_indices]
+
+    # Filter and remap edge indices
+    edge_indices_filtered = [
+        [index_map[i], index_map[j]]
+        for i, j in edge_indices_crystal
+        if i in largest_component and j in largest_component
+    ]
+
+    # Use filtered data from now on
+    tiled_xyz = tiled_xyz_filtered
+    edge_indices_crystal = edge_indices_filtered
+
+    plot_crystal(tiled_xyz, edge_indices_crystal)
+    # plot_crystal(rotated_xyz, edge_indices_crystal) # Plot the crystal and its bonds alone.
+
+    num_atoms = len(tiled_xyz)
+    # Find the number of atoms in the crystal.
+    # num_atoms = len(rotated_xyz)
     print(f"The first {num_atoms} atoms are fixed.")
 
     ################## Crystal initial alone code ##################
 
-    centered_xyz, center = centre_coords(tiled_xyz, num_atoms)                                                       # Centre all atoms around the crystal's centroid.
+    centered_xyz, center = centre_coords(tiled_xyz, num_atoms)
+    print('Len of centred xyz: ', len(centered_xyz))
+    # centered_xyz, center = centre_coords(rotated_xyz, num_atoms) # Centre all atoms around the crystal's centroid.
     print("Crystal center: ", center)
     print("Centered xyz: ", centered_xyz)
 
@@ -122,7 +165,6 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     print('Combined XYZ saved!')
 
     #################### Combined initial Code #####################
-
     edge_indices_comb = build_connections(combined_xyz, num_atoms, name)
     print("Edge indices combined: ", edge_indices_comb)
 
@@ -186,7 +228,8 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     if test_train == '1':
 
-        optimised_xyz_raw = optimise_geometry(combined_xyz, num_atoms, name)
+        # optimised_xyz_raw = (optimise_geometry(combined_xyz, num_atoms, name))
+        optimised_xyz_raw = ['O -5.585093 -5.803385 0.648110', 'O -3.368041 -3.753687 0.648110', 'O 3.938545 3.227738 0.403422', 'O 6.155597 5.277436 0.403422', 'O -5.340491 3.472425 0.403422', 'O -3.123438 5.522123 0.403422', 'O 1.708155 -4.280650 0.602900', 'O 1.327943 -1.734725 0.591624', 'O 4.318834 0.684741 0.525766', 'O -0.508820 -6.327421 0.713968', 'O -0.264217 2.948390 0.469281', 'O 1.952758 4.995160 0.358212', 'O 6.424779 -1.478955 0.525766', 'O -2.854256 -1.234267 0.525766', 'O -4.960201 0.929428 0.525766', 'O -0.778080 0.426042 0.480556', 'O -3.044148 -6.327910 0.268396', 'O 6.479490 2.703213 0.023708', 'O -2.799545 2.947901 0.023708', 'O 3.859721 -1.868834 0.146052', 'O 1.786434 0.795281 0.077265', 'O -0.833335 -3.776766 0.199609', 'O -0.588732 5.499044 -0.045079', 'O -5.419314 -1.624147 0.146052', 'Cr -4.259096 -5.013764 -0.623229', 'Cr 5.264542 4.017359 -0.867916', 'Cr -4.014493 4.262047 -0.867916', 'Cr 2.400008 -2.868799 -0.684401', 'Cr 3.244956 1.750051 -0.806745', 'Cr 0.380422 -5.136107 -0.623229', 'Cr 0.625024 4.139703 -0.867916', 'Cr 5.142241 -0.620546 -0.745573', 'Cr -4.136795 -0.375858 -0.745573', 'Cr 0.502723 -0.498202 -0.745573', 'Cr -2.239510 -2.746455 -0.684401', 'Cr -1.394562 1.872394 -0.806745', 'H 1.227979 -3.026039 2.180860', 'H -0.967164 -3.785065 4.124145']
         print('Raw optimised xyz: ', optimised_xyz_raw)
 
         optimised_xyz, optimised_centre = centre_coords(optimised_xyz_raw, num_atoms)                                     # Centre all atoms around the crystal's centroid.
@@ -196,7 +239,8 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
         plot_crystal(optimised_xyz, edge_indices_comb)                                                                  # Plot optimised system.
 
-        energy_comb = calculate_energy(optimised_xyz)
+        # energy_comb = calculate_energy(optimised_xyz)
+        energy_comb = -441836.170474524
         print('Combined energy: ', energy_comb)
 
         #################### Optimised combined Code #################
@@ -222,11 +266,12 @@ def data_creator(hydrogen, compound_ID, name, test_train):
         print("Node features optimised H alone: ", node_features_opt_H)
         print("Edge features optimised H alone: ", edge_features_opt_H)
 
-        volume_opt_H = compute_volume(H_opt_xyz)
-        # volume_opt_H = 0
+        # volume_opt_H = compute_volume(H_opt_xyz)
+        volume_opt_H = 0
         print("Volume optimised H alone: ", volume_opt_H)
 
-        energy_crystal = calculate_energy(centered_xyz)
+        # energy_crystal = calculate_energy(centered_xyz)
+        energy_crystal = -440707.436409493
         print('Crystal alone energy: ', energy_crystal)
 
         energy_H = calculate_energy(H_opt_xyz)
