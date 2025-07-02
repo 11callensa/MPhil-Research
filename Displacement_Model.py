@@ -590,9 +590,9 @@ def run_training():
             print("No model name entered. Exiting...")
             exit()
 
-        model_dir = "Coordinate GNN Models"                                                                             # Save the trained model in a folder along with its hyperparameters.
+        model_dir = "Displacement GNN Models"                                                                             # Save the trained model in a folder along with its hyperparameters.
         os.makedirs(model_dir, exist_ok=True)
-        model_save_path = os.path.join(model_dir, f"coordinate_model_{model_name}.pt")
+        model_save_path = os.path.join(model_dir, f"displacement_model_{model_name}.pt")
 
         model_data = {
             "model_state_dict": model.state_dict(),
@@ -662,7 +662,3 @@ def run_testing():
         print("Predicted Optimised Coordinates: ", predicted_coords)
 
     print("Testing completed.")
-
-
-# run_training()
-# run_testing()

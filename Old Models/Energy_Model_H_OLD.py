@@ -9,13 +9,9 @@ import torch
 import torch.optim as optim
 from torch_optimizer import AdaBelief
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
-from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
-from torch_geometric.nn import global_mean_pool
-from torch_geometric.nn import GlobalAttention
 from torch_geometric.nn import SchNet
+from torch_cluster import radius_graph
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
@@ -27,7 +23,7 @@ from tkinter import filedialog
 # else:
 #     device = torch.device("cpu")
 
-device = torch.device("cuda")
+device = torch.device("cpu")
 
 print("Device:", device)
 
@@ -44,25 +40,22 @@ class LogCoshLoss(nn.Module):                                                   
         return torch.mean(torch.log(torch.cosh(pred - target + 1e-12)))
 
 
-class SchNetWithNumPlaced(nn.Module):
-    def __init__(self, hidden_channels):
+class GNN_SchNet(nn.Module):
+    def __init__(self, hidden_channels=128):
         super().__init__()
         self.schnet = SchNet(hidden_channels=hidden_channels)  # returns node embeddings
 
         self.fc = nn.Sequential(
-            nn.Linear(1, 64),
+            nn.Linear(hidden_channels, 64),
             nn.SiLU(),
-            nn.Linear(64, 1),
-            nn.SiLU()
+            nn.Linear(64, 1)
         )
 
-    def forward(self, z, pos, batch):
-
+    def forward(self, z, pos, num_placed, batch):
+        # Get node embeddings [num_nodes, hidden_channels]
         node_embeddings = self.schnet(z, pos, batch)
 
-        out = self.fc(node_embeddings)
-
-        return out
+        return node_embeddings
 
 
 def load_training_data(csv_path):
@@ -303,7 +296,7 @@ class PreProcess:
 
 def run_training():
 
-    file_path = "energy_training.csv"
+    file_path = "../energy_training.csv"
     orig_data = load_training_data(file_path)
 
     # print('Orig data: ', orig_data['node_features'])
@@ -311,34 +304,52 @@ def run_training():
 
     data = dict()
 
-    supplementary_path = "H_training_supplement.csv"
+    supplementary_path = "../H_training_supplement.csv"
     suppl_data = load_suppl_data(supplementary_path)
+    # suppl_data['node_features'] = [np.array(graph)[:, 3:6].tolist() for graph in suppl_data['node_features']]
+
+    # print('Suppl Data: ', suppl_data['node_features'])
+    # print('Suppl data number of graphs: ', len(suppl_data['node_features']))
+    # input()
 
     data['node_features'] = orig_data['node_features']
+    # data['node_features'] = [np.array(graph)[:, 3:6].tolist() for graph in orig_data['node_features']]
     data['edge_features'] = orig_data['edge_features']
     data['edge_indices'] = orig_data['edge_indices']
     data['energy_output'] = orig_data['energy_output']
     data['system_names'] = orig_data['system_names']
     data['num_placed'] = orig_data['num_placed']
 
-    data['node_features'].extend(suppl_data['node_features'])
-    data['edge_features'].extend(suppl_data['edge_features'])
-    data['edge_indices'].extend(suppl_data['edge_indices'])
-    data['energy_output'].extend(suppl_data['energy_output'])
-    data['system_names'].extend(suppl_data['system_names'])
-    data['num_placed'].extend(suppl_data['num_placed'])
+    # data['node_features'] = [np.array(graph)[:, 3:6].tolist() for graph in suppl_data['node_features']]
+    # data['node_features'] = suppl_data['node_features']
+    # data['edge_features'] = suppl_data['edge_features']
+    # data['edge_indices'] = suppl_data['edge_indices']
+    # data['energy_output'] = suppl_data['energy_output']
+    # data['system_names'] = suppl_data['system_names']
+    # data['num_placed'] = suppl_data['num_placed']
+
+    # data['node_features'].extend(suppl_data['node_features'])
+    # data['edge_features'].extend(suppl_data['edge_features'])
+    # data['edge_indices'].extend(suppl_data['edge_indices'])
+    # data['energy_output'].extend(suppl_data['energy_output'])
+    # data['system_names'].extend(suppl_data['system_names'])
+    # data['num_placed'].extend(suppl_data['num_placed'])
+
+    # print('Data energy output: ', data['energy_output'])
 
     random.seed(int(time.time()))
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
-    num_train = 190
+    num_train = 26
     print('No. of training graphs: ', num_train)
     train_indices = graph_indices[:num_train]
     test_indices = graph_indices[num_train:]
 
     def extract_by_indices(data_dict, key, indices):
         return [data_dict[key][i] for i in indices]
+
+    print(data['energy_output'])
 
     for i, energy in enumerate(data['energy_output']):
         data['energy_output'][i] = -1 * data['energy_output'][i]
@@ -356,7 +367,7 @@ def run_training():
     flat_nodes_train, _ = flatten_graph_data(train_node_feats)
     flat_edges_train, _ = flatten_graph_data(train_edge_feats)
 
-    node_normaliser.fit(flat_nodes_train, 7)  # Only use first 6 node features
+    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     energy_normaliser.fit(train_energies)
     num_placed_normaliser.fit(train_num_placed)
@@ -399,9 +410,9 @@ def run_training():
 
     epochs = 500
 
-    schnet_nodes = 720
+    schnet_nodes = 760
 
-    model = SchNetWithNumPlaced(hidden_channels=schnet_nodes).to(device)
+    model = GNN_SchNet(hidden_channels=schnet_nodes).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 
@@ -411,7 +422,7 @@ def run_training():
     loss_func = nn.MSELoss()
     # loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 190
+    batch_size_train = 16
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -426,7 +437,7 @@ def run_training():
             pos = batch.x[:, 0:3].float()  # 3D coordinates
             batch_idx = batch.batch  # batch indices per atom
 
-            predicted_train_energy = model(z, pos, batch_idx)
+            predicted_train_energy = model(z, pos, batch.num_placed, batch_idx)
 
             loss = loss_func(predicted_train_energy, batch.y.view(-1, 1))
 
@@ -447,8 +458,10 @@ def run_training():
                 pos = batch_test.x[:, 0:3].float()  # 3D coordinates
                 batch_idx = batch_test.batch  # batch indices per atom
 
-                predicted_test_energy = model(z, pos, batch_idx)
+                # predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr,
+                #                               batch_test.num_placed, batch_test.batch)
 
+                predicted_test_energy = model(z, pos, batch_test.num_placed, batch_idx)
                 loss = loss_func(predicted_test_energy, batch_test.y.view(-1, 1))
                 test_loss += loss.item()
 
@@ -487,15 +500,7 @@ def run_training():
     if save_option == 'y':
 
         hyperparameters = {
-            "node_dim": node_size,
-            "hidden_node_dim": node_hidden_size,
-            "output_node_dim": node_output_size,
-            "edge_dim": edge_size,
-            "hidden_edge_dim": edge_hidden_size,
-            "output_edge_dim": edge_output_size,
-            "hidden_gnn_dim1": hidden_size1,
-            "hidden_gnn_dim2": hidden_size2,
-            "output_gnn_dim": gnn_output_size
+            "schnet_nodes": schnet_nodes,
         }  # Store the hyperparameters in a dictionary for saving.
 
         model_name = input('Input the model name: ')
@@ -503,7 +508,7 @@ def run_training():
             print("No model name entered. Exiting...")
             exit()
 
-        model_dir = "Energy H GNN Models"  # Save the trained model in a folder along with its hyperparameters.
+        model_dir = "../Energy H GNN Models"  # Save the trained model in a folder along with its hyperparameters.
         os.makedirs(model_dir, exist_ok=True)
         model_save_path = os.path.join(model_dir, f"energy_H_model_{model_name}.pt")
 
@@ -521,7 +526,7 @@ def run_training():
 
 def run_testing():
 
-    train_path = "energy_training.csv"
+    train_path = "../energy_training.csv"
     train_data = load_training_data(train_path)
 
     train_indices = list(range(len(train_data['node_features'])))
@@ -586,7 +591,7 @@ def run_testing():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    model_dir = "Energy H GNN Models"  # Select the model to test.
+    model_dir = "../Energy H GNN Models"  # Select the model to test.
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
                                                  filetypes=[("PyTorch Models", "*.pt")])
 
@@ -601,16 +606,8 @@ def run_testing():
     hyperparameters = model_data[
         "hyperparameters"]  # Retrieve the hyperparameters and use them to initialize the model.
 
-    model = GNN(
-        node_dim=hyperparameters["node_dim"],
-        hidden_node_dim=hyperparameters["hidden_node_dim"],
-        output_node_dim=hyperparameters["output_node_dim"],
-        edge_dim=hyperparameters["edge_dim"],
-        hidden_edge_dim=hyperparameters["hidden_edge_dim"],
-        output_edge_dim=hyperparameters["output_edge_dim"],
-        hidden_gnn_dim1=hyperparameters["hidden_gnn_dim1"],
-        hidden_gnn_dim2=hyperparameters["hidden_gnn_dim2"],
-        output_gnn_dim=hyperparameters["output_gnn_dim"]
+    model = GNN_SchNet(
+        node_dim=hyperparameters["schnet_nodes"],
     )
 
     model.to(device)

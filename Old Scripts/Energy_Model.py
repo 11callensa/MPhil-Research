@@ -300,7 +300,7 @@ def data_preprocess(batch_size):
     #     print("No file selected. Exiting...")
     #     return
 
-    file_path = 'energy_training.csv'
+    file_path = '../energy_training.csv'
 
     # Load the diffusion data from the selected file
     data = load_training_data(file_path)
