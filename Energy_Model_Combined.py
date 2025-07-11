@@ -341,7 +341,9 @@ def run_training():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        graph_array = graph_array[:, :4]
+        # graph_array = graph_array[:, :4]
+        # Select columns 0, 1, 2, and 6
+        graph_array = graph_array[:, [0, 1, 2, 6]]
         data['node_features'][i] = graph_array.tolist()
 
     num_train = len(graph_indices) - 1
@@ -405,7 +407,7 @@ def run_training():
         print(" -", g.system_name)
 
     epochs = 400
-    batch_size = 80  # Adjust as needed
+    batch_size = 29  # Adjust as needed
 
     node_size = 4
     node_hidden_size = 128
@@ -510,7 +512,7 @@ def run_training():
             "hidden_gnn_dim1": hidden_size1,
             "hidden_gnn_dim2": hidden_size2,
             "output_gnn_dim": gnn_output_size
-        }  # Store the hyperparameters in a dictionary for saving.
+        }
 
         model_name = input('Input the model name: ')
         if not model_name:
@@ -521,13 +523,21 @@ def run_training():
         os.makedirs(model_dir, exist_ok=True)
         model_save_path = os.path.join(model_dir, f"energy_combined_model_{model_name}.pt")
 
-        model_data = {
+        # Bundle everything into one dictionary
+        save_data = {
             "model_state_dict": model.state_dict(),
-            "hyperparameters": hyperparameters
-        }  # Create a dictionary to store both the state_dict and hyperparameters.
+            "hyperparameters": hyperparameters,
+            "normalisers": {
+                'node_normaliser': node_normaliser,
+                'edge_normaliser': edge_normaliser,
+                'energy_normaliser': energy_normaliser
+            },
+            "train_system_names": [g.system_name for g in train_graphs]
+        }
 
-        torch.save(model_data, model_save_path)  # Save the model data.
-        print(f"Model and hyperparameters saved at: {model_save_path}")
+        # Save everything
+        torch.save(save_data, model_save_path)
+        print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
 
     else:
         return None
@@ -535,44 +545,59 @@ def run_training():
 
 def run_testing():
 
-    train_path = "energy_training.csv"
-    train_data = load_training_data(train_path)
-
-    train_indices = list(range(len(train_data['node_features'])))
-
-    def extract_by_indices(data_dict, key, indices):
-        return [data_dict[key][i] for i in indices]
-
-    for i, energy in enumerate(train_data['energy_output']):
-        train_data['energy_output'][i] = -1 * train_data['energy_output'][i]
-
-    train_node_feats = extract_by_indices(train_data, 'node_features', train_indices)
-    train_edge_feats = extract_by_indices(train_data, 'edge_features', train_indices)
-    train_energies = extract_by_indices(train_data, 'energy_output', train_indices)
-
-    node_normaliser = PreProcess()
-    edge_normaliser = PreProcess()
-    energy_normaliser = MinMaxNormalizer()
-
-    flat_nodes_train, _ = flatten_graph_data(train_node_feats)
-    flat_edges_train, _ = flatten_graph_data(train_edge_feats)
-
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
-    edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
-    energy_normaliser.fit(train_energies)
-
     name = 'NiO'
 
     test_file_path = f"Energy Testing Data/{name}_energy_testing.csv"
     test_data = load_testing_data(test_file_path)
 
+    for i, graph in enumerate(test_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        test_data['node_features'][i] = graph_array.tolist()
+
+    for i, edge_feat in enumerate(test_data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        test_data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(test_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        # graph_array = graph_array[:, :4]
+        # Select columns 0, 1, 2, and 6
+        graph_array = graph_array[:, [0, 1, 2, 6]]
+        test_data['node_features'][i] = graph_array.tolist()
+
     test_indices = list(range(len(test_data['node_features'])))
 
-    test_node_feats = extract_by_indices(test_data, 'node_features', test_indices)
-    test_edge_feats = extract_by_indices(test_data, 'edge_features', test_indices)
+    test_node_feats = [test_data['node_features'][i] for i in test_indices]
+    test_edge_feats = [test_data['edge_features'][i] for i in test_indices]
 
     flat_nodes_test, test_node_sizes = flatten_graph_data(test_node_feats)
     flat_edges_test, test_edge_sizes = flatten_graph_data(test_edge_feats)
+
+    model_dir = "Energy Combined GNN Models"
+    model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
+                                                 filetypes=[("PyTorch Models", "*.pt")])
+
+    if not model_file_path:
+        print("No model selected. Exiting...")
+        return
+
+    print(f"Selected model: {model_file_path}")
+
+    model_data = torch.load(model_file_path)
+
+    # Load normalisers from saved model data
+    node_normaliser = model_data["normalisers"]['node_normaliser']
+    edge_normaliser = model_data["normalisers"]['edge_normaliser']
+    energy_normaliser = model_data["normalisers"]['energy_normaliser']
 
     node_features_norm_flat = node_normaliser.transform(flat_nodes_test)
     edge_features_norm_flat = edge_normaliser.transform(flat_edges_test)
@@ -600,20 +625,7 @@ def run_testing():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    model_dir = "Energy Combined GNN Models"    # Select the model to test.
-    model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
-                                                 filetypes=[("PyTorch Models", "*.pt")])
-
-    if not model_file_path:
-        print("No model selected. Exiting...")
-        return
-
-    print(f"Selected model: {model_file_path}")
-
-    model_data = torch.load(model_file_path)  # Load the model and hyperparameters.
-
-    hyperparameters = model_data[
-        "hyperparameters"]  # Retrieve the hyperparameters and use them to initialize the model.
+    hyperparameters = model_data["hyperparameters"]
 
     model = GNN(
         node_dim=hyperparameters["node_dim"],
@@ -626,10 +638,9 @@ def run_testing():
         hidden_gnn_dim2=hyperparameters["hidden_gnn_dim2"],
         output_gnn_dim=hyperparameters["output_gnn_dim"]
     )
-
     model.to(device)
+    model.load_state_dict(model_data["model_state_dict"])
 
-    model.load_state_dict(model_data["model_state_dict"])  # Load the state_dict (weights).
     model.eval()  # Set the model to evaluation mode.
 
     all_predicted = []
@@ -638,7 +649,7 @@ def run_testing():
         for batch_test in test_loader:
             predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
 
-            all_predicted.extend(predicted_test_energy.numpy())
+            all_predicted.extend(predicted_test_energy.cpu().numpy())
             all_system_names.extend(batch_test.system_name)
 
     predicted_test_energy_denorm = energy_normaliser.inverse_transform(all_predicted)

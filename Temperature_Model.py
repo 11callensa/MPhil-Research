@@ -134,26 +134,6 @@ class GNN(nn.Module):
         return output
 
 
-class GNN_SchNet(nn.Module):
-    def __init__(self, hidden_channels=128):
-        super().__init__()
-        self.schnet = SchNet(hidden_channels=hidden_channels)  # returns node embeddings
-
-        self.fc = nn.Sequential(
-            nn.Linear(1, 128),
-            nn.SiLU(),
-            nn.Linear(128, 2)
-        )
-
-    def forward(self, z, pos, batch):
-        # Get node embeddings [num_nodes, hidden_channels]
-        graph_embedding = self.schnet(z, pos, batch)
-
-        out = self.fc(graph_embedding)
-
-        return out
-
-
 def load_training_data(csv_path):
     df = pd.read_csv(csv_path)
 
@@ -347,7 +327,9 @@ def run_training():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        graph_array = graph_array[:, :4]
+        # graph_array = graph_array[:, :4]
+        # Select columns 0, 1, 2, and 6
+        graph_array = graph_array[:, [0, 1, 2, 6]]
         data['node_features'][i] = graph_array.tolist()
 
     train_node_feats = extract_by_indices(data, 'node_features', train_indices)
@@ -547,7 +529,7 @@ def run_training():
             "hidden_gnn_dim1": hidden_size1,
             "hidden_gnn_dim2": hidden_size2,
             "output_gnn_dim": gnn_output_size
-        }  # Store the hyperparameters in a dictionary for saving.
+        }
 
         model_name = input('Input the model name: ')
         if not model_name:
@@ -558,13 +540,22 @@ def run_training():
         os.makedirs(model_dir, exist_ok=True)
         model_save_path = os.path.join(model_dir, f"temperature_model_{model_name}.pt")
 
-        model_data = {
+        # Bundle everything into one dictionary
+        save_data = {
             "model_state_dict": model.state_dict(),
-            "hyperparameters": hyperparameters
-        }  # Create a dictionary to store both the state_dict and hyperparameters.
+            "hyperparameters": hyperparameters,
+            "normalisers": {
+                'node_normaliser': node_normaliser,
+                'edge_normaliser': edge_normaliser,
+                'ads_normaliser': ads_normaliser,
+                'des_normaliser': des_normaliser
+            },
+            "train_system_names": [g.system_name for g in train_graphs]
+        }
 
-        torch.save(model_data, model_save_path)  # Save the model data.
-        print(f"Model and hyperparameters saved at: {model_save_path}")
+        # Save everything
+        torch.save(save_data, model_save_path)
+        print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
 
     else:
         return None
@@ -572,51 +563,60 @@ def run_training():
 
 def run_testing():
 
-    train_path = "temperature_training.csv"
-    train_data = load_training_data(train_path)
-
-    train_indices = list(range(len(train_data['node_features'])))
-
-    def extract_by_indices(data_dict, key, indices):
-        return [data_dict[key][i] for i in indices]
-
-    train_node_feats = extract_by_indices(train_data, 'node_features', train_indices)
-    train_edge_feats = extract_by_indices(train_data, 'edge_features', train_indices)
-
-    train_temp_feats = [
-        [float(t[0]), float(t[1])] for t in extract_by_indices(train_data, 'temp_outputs', train_indices)
-    ]
-
-    adsorption_temps_train = [[temp[0]] for temp in train_temp_feats]
-    desorption_temps_train = [[temp[1]] for temp in train_temp_feats]
-
-    node_normaliser = PreProcess()
-    edge_normaliser = PreProcess()
-    ads_normaliser = MinMaxNormalizer()
-    des_normaliser = MinMaxNormalizer()
-
-    flat_nodes_train, _ = flatten_graph_data(train_node_feats)
-    flat_edges_train, _ = flatten_graph_data(train_edge_feats)
-    flat_ads_train, _ = flatten_graph_data(adsorption_temps_train)
-    flat_des_train, _ = flatten_graph_data(desorption_temps_train)
-
-    node_normaliser.fit(flat_nodes_train, 6)  # Only use first 6 node features
-    edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
-    ads_normaliser.fit(flat_ads_train)
-    des_normaliser.fit(flat_des_train)
-
     name = 'NiO'
 
     test_file_path = f"Temperature Testing Data/{name}_temperature_testing.csv"
     test_data = load_testing_data(test_file_path)
 
+    for i, graph in enumerate(test_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        test_data['node_features'][i] = graph_array.tolist()
+
+    for i, edge_feat in enumerate(test_data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        test_data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(test_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        # graph_array = graph_array[:, :4]
+        # Select columns 0, 1, 2, and 6
+        graph_array = graph_array[:, [0, 1, 2, 6]]
+        test_data['node_features'][i] = graph_array.tolist()
+
     test_indices = list(range(len(test_data['node_features'])))
 
-    test_node_feats = extract_by_indices(test_data, 'node_features', test_indices)
-    test_edge_feats = extract_by_indices(test_data, 'edge_features', test_indices)
+    test_node_feats = [test_data['node_features'][i] for i in test_indices]
+    test_edge_feats = [test_data['edge_features'][i] for i in test_indices]
 
     flat_nodes_test, test_node_sizes = flatten_graph_data(test_node_feats)
     flat_edges_test, test_edge_sizes = flatten_graph_data(test_edge_feats)
+
+    model_dir = "Energy Compound GNN Models"
+    model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
+                                                 filetypes=[("PyTorch Models", "*.pt")])
+
+    if not model_file_path:
+        print("No model selected. Exiting...")
+        return
+
+    print(f"Selected model: {model_file_path}")
+
+    model_data = torch.load(model_file_path)
+
+    # Load normalisers from saved model data
+    node_normaliser = model_data["normalisers"]['node_normaliser']
+    edge_normaliser = model_data["normalisers"]['edge_normaliser']
+    ads_normaliser = model_data["normalisers"]['ads_normaliser']
+    des_normaliser = model_data["normalisers"]['des_normaliser']
 
     node_features_norm_flat = node_normaliser.transform(flat_nodes_test)
     edge_features_norm_flat = edge_normaliser.transform(flat_edges_test)
@@ -643,18 +643,6 @@ def run_testing():
     print("\nTest system:")
     for g in test_graphs:
         print(" -", g.system_name)
-
-    model_dir = "Temperature GNN Models"  # Select the model to test.
-    model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
-                                                 filetypes=[("PyTorch Models", "*.pt")])
-
-    if not model_file_path:
-        print("No model selected. Exiting...")
-        return
-
-    print(f"Selected model: {model_file_path}")
-
-    model_data = torch.load(model_file_path)  # Load the model and hyperparameters.
 
     hyperparameters = model_data[
         "hyperparameters"]  # Retrieve the hyperparameters and use them to initialize the model.

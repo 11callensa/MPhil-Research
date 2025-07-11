@@ -326,6 +326,22 @@ def run_training():
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
+    for i, edge_feat in enumerate(data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        # graph_array = graph_array[:, :4]
+        # Select columns 0, 1, 2, and 6
+        graph_array = graph_array[:, [0, 1, 2, 6]]
+        data['node_features'][i] = graph_array.tolist()
+
     num_train = len(graph_indices) - 1
     print('No. of training graphs: ', num_train)
     train_indices = graph_indices[:num_train]
@@ -336,15 +352,6 @@ def run_training():
 
     for i, energy in enumerate(data['energy_output']):
         data['energy_output'][i] = -1 * data['energy_output'][i]
-
-    for i, graph in enumerate(data['node_features']):
-        graph_array = np.array(graph)  # shape (num_nodes, num_features)
-        coords = graph_array[:, :3]  # extract xyz
-        centroid = np.mean(coords, axis=0)
-        centered_coords = coords - centroid
-        graph_array[:, :3] = centered_coords
-        graph_array = graph_array[:, 4:5]
-        data['node_features'][i] = graph_array.tolist()
 
     train_node_feats = extract_by_indices(data, 'node_features', train_indices)
     train_edge_feats = extract_by_indices(data, 'edge_features', train_indices)
@@ -357,7 +364,7 @@ def run_training():
     flat_nodes_train, _ = flatten_graph_data(train_node_feats)
     flat_edges_train, _ = flatten_graph_data(train_edge_feats)
 
-    node_normaliser.fit(flat_nodes_train, 1)  # Only use first 6 node features
+    node_normaliser.fit(flat_nodes_train, 4)  # Only use first 6 node features
     edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
     energy_normaliser.fit(train_energies)
 
@@ -395,13 +402,14 @@ def run_training():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    epochs = 200
+    epochs = 400
+    batch_size = 29  # Adjust as needed
 
-    node_size = 1
+    node_size = 4
     node_hidden_size = 128
     node_output_size = 256
 
-    edge_size = 2
+    edge_size = 1
     edge_hidden_size = 128
     edge_output_size = 512
 
@@ -413,18 +421,15 @@ def run_training():
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = AdaBelief(model.parameters(), lr=0.001, weight_decay=1e-06)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
 
     loss_train_list = []
     loss_test_list = []
 
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = num_train  # Adjust as needed
-    batch_size_test = 1
-
-    train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
-    test_loader = DataLoader(test_graphs, batch_size_test, shuffle=False)
+    train_loader = DataLoader(train_graphs, batch_size, shuffle=True)
+    test_loader = DataLoader(test_graphs, batch_size, shuffle=False)
 
     for epoch in range(epochs):
         model.train()
@@ -434,7 +439,7 @@ def run_training():
 
             predicted_train_energy = model(batch.x, batch.edge_index, batch.edge_attr, batch.batch)
 
-            loss = loss_func(torch.log1p(predicted_train_energy), torch.log1p(batch.y.view(-1, 1)))
+            loss = loss_func(predicted_train_energy, batch.y.view(-1, 1))
 
             optimizer.zero_grad()
             loss.backward()
@@ -452,7 +457,7 @@ def run_training():
 
                 predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
 
-                loss = loss_func(torch.log1p(predicted_test_energy), torch.log1p(batch_test.y.view(-1, 1)))
+                loss = loss_func(predicted_test_energy, batch_test.y.view(-1, 1))
                 test_loss += loss.item()
 
                 all_predicted.extend(predicted_test_energy.numpy())
@@ -482,7 +487,11 @@ def run_training():
 
     print("\n--- Predicted vs True Energies ---")
     for name, pred, true_val in zip(all_system_names, predicted_test_energy_denorm, true_energy_denorm):
-        print(f"{name:<30} | Predicted: {float(pred):.6f} | True: {float(true_val):.6f}")
+
+        pred = -1 * pred
+        true_val = -1 * true_val
+
+        print(f"{name:<30} | Predicted: {float(pred):.6f} eV | True: {float(true_val):.6f} eV")
         print(f"Percentage Error: {(true_val - pred) * 100 / (true_val)} %")
 
     save_option = input('Do you want to save this model?: ')
@@ -499,7 +508,7 @@ def run_training():
             "hidden_gnn_dim1": hidden_size1,
             "hidden_gnn_dim2": hidden_size2,
             "output_gnn_dim": gnn_output_size
-        }  # Store the hyperparameters in a dictionary for saving.
+        }
 
         model_name = input('Input the model name: ')
         if not model_name:
@@ -510,55 +519,27 @@ def run_training():
         os.makedirs(model_dir, exist_ok=True)
         model_save_path = os.path.join(model_dir, f"energy_compound_model_{model_name}.pt")
 
-        model_data = {
+        # Bundle everything into one dictionary
+        save_data = {
             "model_state_dict": model.state_dict(),
-            "hyperparameters": hyperparameters
-        }  # Create a dictionary to store both the state_dict and hyperparameters.
+            "hyperparameters": hyperparameters,
+            "normalisers": {
+                'node_normaliser': node_normaliser,
+                'edge_normaliser': edge_normaliser,
+                'energy_normaliser': energy_normaliser
+            },
+            "train_system_names": [g.system_name for g in train_graphs]
+        }
 
-        torch.save(model_data, model_save_path)  # Save the model data.
-        print(f"Model and hyperparameters saved at: {model_save_path}")
+        # Save everything
+        torch.save(save_data, model_save_path)
+        print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
 
     else:
         return None
 
 
 def run_testing():
-
-    train_path = "energy_training.csv"
-    train_data = load_training_data(train_path)
-
-    train_indices = list(range(len(train_data['node_features'])))
-
-    def extract_by_indices(data_dict, key, indices):
-        return [data_dict[key][i] for i in indices]
-
-    for i, energy in enumerate(train_data['energy_output']):
-        train_data['energy_output'][i] = -1 * train_data['energy_output'][i]
-
-    for i, graph in enumerate(train_data['node_features']):
-        graph_array = np.array(graph)  # shape (num_nodes, num_features)
-
-        coords = graph_array[:, :3]  # extract xyz
-        centroid = np.mean(coords, axis=0)
-        centered_coords = coords - centroid
-        graph_array[:, :3] = centered_coords
-        graph_array = graph_array[:, 4:5]
-        train_data['node_features'][i] = graph_array.tolist()
-
-    train_node_feats = extract_by_indices(train_data, 'node_features', train_indices)
-    train_edge_feats = extract_by_indices(train_data, 'edge_features', train_indices)
-    train_energies = extract_by_indices(train_data, 'energy_output', train_indices)
-
-    node_normaliser = PreProcess()
-    edge_normaliser = PreProcess()
-    energy_normaliser = MinMaxNormalizer()
-
-    flat_nodes_train, _ = flatten_graph_data(train_node_feats)
-    flat_edges_train, _ = flatten_graph_data(train_edge_feats)
-
-    node_normaliser.fit(flat_nodes_train, 1)  # Only use first 6 node features
-    edge_normaliser.fit(flat_edges_train, len(flat_edges_train[0]))
-    energy_normaliser.fit(train_energies)
 
     name = 'NiO'
 
@@ -571,16 +552,48 @@ def run_testing():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        graph_array = graph_array[:, 4:5]
+        test_data['node_features'][i] = graph_array.tolist()
+
+    for i, edge_feat in enumerate(test_data['edge_features']):
+        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
+        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
+        test_data['edge_features'][i] = edge_array.tolist()
+
+    for i, graph in enumerate(test_data['node_features']):
+        graph_array = np.array(graph)  # shape (num_nodes, num_features)
+        coords = graph_array[:, :3]  # extract xyz
+        centroid = np.mean(coords, axis=0)
+        centered_coords = coords - centroid
+        graph_array[:, :3] = centered_coords
+        # graph_array = graph_array[:, :4]
+        # Select columns 0, 1, 2, and 6
+        graph_array = graph_array[:, [0, 1, 2, 6]]
         test_data['node_features'][i] = graph_array.tolist()
 
     test_indices = list(range(len(test_data['node_features'])))
 
-    test_node_feats = extract_by_indices(test_data, 'node_features', test_indices)
-    test_edge_feats = extract_by_indices(test_data, 'edge_features', test_indices)
+    test_node_feats = [test_data['node_features'][i] for i in test_indices]
+    test_edge_feats = [test_data['edge_features'][i] for i in test_indices]
 
     flat_nodes_test, test_node_sizes = flatten_graph_data(test_node_feats)
     flat_edges_test, test_edge_sizes = flatten_graph_data(test_edge_feats)
+
+    model_dir = "Energy Compound GNN Models"
+    model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
+                                                 filetypes=[("PyTorch Models", "*.pt")])
+
+    if not model_file_path:
+        print("No model selected. Exiting...")
+        return
+
+    print(f"Selected model: {model_file_path}")
+
+    model_data = torch.load(model_file_path)
+
+    # Load normalisers from saved model data
+    node_normaliser = model_data["normalisers"]['node_normaliser']
+    edge_normaliser = model_data["normalisers"]['edge_normaliser']
+    energy_normaliser = model_data["normalisers"]['energy_normaliser']
 
     node_features_norm_flat = node_normaliser.transform(flat_nodes_test)
     edge_features_norm_flat = edge_normaliser.transform(flat_edges_test)
@@ -608,20 +621,7 @@ def run_testing():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    model_dir = "Energy Compound GNN Models"    # Select the model to test.
-    model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
-                                                 filetypes=[("PyTorch Models", "*.pt")])
-
-    if not model_file_path:
-        print("No model selected. Exiting...")
-        return
-
-    print(f"Selected model: {model_file_path}")
-
-    model_data = torch.load(model_file_path)  # Load the model and hyperparameters.
-
-    hyperparameters = model_data[
-        "hyperparameters"]  # Retrieve the hyperparameters and use them to initialize the model.
+    hyperparameters = model_data["hyperparameters"]
 
     model = GNN(
         node_dim=hyperparameters["node_dim"],
@@ -634,10 +634,9 @@ def run_testing():
         hidden_gnn_dim2=hyperparameters["hidden_gnn_dim2"],
         output_gnn_dim=hyperparameters["output_gnn_dim"]
     )
-
     model.to(device)
+    model.load_state_dict(model_data["model_state_dict"])
 
-    model.load_state_dict(model_data["model_state_dict"])  # Load the state_dict (weights).
     model.eval()  # Set the model to evaluation mode.
 
     all_predicted = []
@@ -646,7 +645,7 @@ def run_testing():
         for batch_test in test_loader:
             predicted_test_energy = model(batch_test.x, batch_test.edge_index, batch_test.edge_attr, batch_test.batch)
 
-            all_predicted.extend(predicted_test_energy.numpy())
+            all_predicted.extend(predicted_test_energy.cpu().numpy())
             all_system_names.extend(batch_test.system_name)
 
     predicted_test_energy_denorm = energy_normaliser.inverse_transform(all_predicted)
