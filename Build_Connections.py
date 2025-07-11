@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from scipy.spatial import KDTree
 
 
@@ -90,21 +91,36 @@ def build_connections(positions, num_fixed, name, save=1):
             if edge not in edge_indices:
                 edge_indices.append(edge)
 
-    def draw_plot():                                                                                                    # Function to visualize connections.
+    def draw_plot():
         ax.clear()
 
-        colors = ['black' if i < num_fixed else 'red' for i in range(len(atom_coordinates))]                            # Color compound atoms black, hydrogen atoms red.
-        ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c=colors, marker='o')
+        # Color and scatter atoms
+        colors = ['black' if i < num_fixed else 'red' for i in range(len(atom_coordinates))]
+        ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2],
+                   c=colors, marker='o')
 
-        for i, (x, y, z) in enumerate(atom_coordinates):                                                                # Label atoms.
+        # Label atoms
+        for i, (x, y, z) in enumerate(atom_coordinates):
             ax.text(x, y, z, str(i), color='black')
 
-        for bond in edge_indices:                                                                                       # Draw bonds.
-            i, j = bond
-            bond_color = 'g' if i < num_fixed and j < num_fixed else 'b'                                                # Green = compound bonds, Blue = hydrogen bonds
+        # Draw bonds with different colors
+        for i, j in edge_indices:
+            bond_color = 'g' if i < num_fixed and j < num_fixed else 'b'
             ax.plot([atom_coordinates[i, 0], atom_coordinates[j, 0]],
                     [atom_coordinates[i, 1], atom_coordinates[j, 1]],
-                    [atom_coordinates[i, 2], atom_coordinates[j, 2]], c=bond_color)
+                    [atom_coordinates[i, 2], atom_coordinates[j, 2]],
+                    c=bond_color)
+
+        # Create custom legend
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', label='Compound Atoms',
+                   markerfacecolor='black', markeredgecolor='k', markersize=8),
+            Line2D([0], [0], marker='o', color='w', label='Hydrogen Atoms',
+                   markerfacecolor='red', markeredgecolor='k', markersize=8),
+            Line2D([0], [0], color='g', lw=2, label='Compound Bonds'),
+            Line2D([0], [0], color='b', lw=2, label='Hydrogen Bonds'),
+        ]
+        ax.legend(handles=legend_elements, loc='upper right')
 
         plt.draw()
 
@@ -122,7 +138,7 @@ def build_connections(positions, num_fixed, name, save=1):
         pass
 
     if save == 1:
-        save_edges_to_csv(edge_indices, name)                                                                               # Save updated edges.
+        save_edges_to_csv(edge_indices, name)                                                                           # Save updated edges.
         return edge_indices
     else:
         return edge_indices

@@ -8,8 +8,8 @@ import Energy_Model_Compound
 import Energy_Model_H
 import Temperature_Model
 
-run_choice = input("Enter 1) Feature extraction mode, 2) Fully test a material mode, 3) Train a single model mode, "
-                   "4) Test on ONE preloaded model mode: ")
+run_choice = input("Enter 1) Feature extraction mode, 2) Fully test a material mode, 3) Train a SINGLE model mode, "
+                   "4) Test a SINGLE preloaded model mode: ")
 
 if run_choice == '1':
 
@@ -20,7 +20,7 @@ if run_choice == '1':
         hydrogen, compound_ID_set = set_train_materials()  # Extract hydrogen and compounds.
         print("Materials set.")
 
-        diffusion_filename = 'diffusion_training.csv'                                                                   # Define the training data file names (For 3 models).
+        diffusion_filename = 'diffusion_training.csv'                                                                   # Define the training data file names (For 3 types of model).
         energy_filename = 'energy_training.csv'
         temperature_filename = 'temperature_training.csv'
 
@@ -92,7 +92,7 @@ if run_choice == '1':
 
     elif test_train_choice == '2':
 
-        hydrogen, compound_ID_set = set_test_materials()  # Extract hydrogen and compounds.
+        hydrogen, compound_ID_set = set_test_materials()                                                                # Extract hydrogen and compounds.
         print("Materials set.")
 
         for compound in compound_ID_set:                                                                                # Loop through each of the compounds to extract data.
@@ -102,14 +102,19 @@ if run_choice == '1':
             energy_test_filename = f'{compound}_energy_testing.csv'
             temperature_test_filename = f'{compound}_temperature_testing.csv'
 
-            file_data = [('Diffusion Testing Data', diffusion_test_filename, ['Compound', 'Node Features Initial Combined', 'Edge Features Initial Combined',
-                                     'Edge Indices Combined', 'Diffusion Input Features', 'Diffusion Initial Coords',
-                                     'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms', 'Oxidation States']),
-                         ('Energy Testing Data', energy_test_filename, ['Compounds', 'Node Features (Triple)',
-                                                                        'Edge Features (Triple)', 'Edge Indices (Triple)',
-                                                                        'Energy Input Features', 'Uncertain Features', 'Num. Fixed Atoms',
-                                                                        'Num. Placed H Atoms', 'Oxidation States']),
-                         ('Temperature Testing Data', temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
+            file_data = [('Diffusion Testing Data',
+                          diffusion_test_filename, ['Compound', 'Node Features Initial Combined',
+                                                    'Edge Features Initial Combined', 'Edge Indices Combined',
+                                                    'Diffusion Input Features', 'Diffusion Initial Coords',
+                                                    'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed Atoms',
+                                                    'Oxidation States']),
+                         ('Energy Testing Data',
+                          energy_test_filename, ['Compounds', 'Node Features (Triple)', 'Edge Features (Triple)',
+                                                 'Edge Indices (Triple)', 'Energy Input Features',
+                                                 'Uncertain Features', 'Num. Fixed Atoms', 'Num. Placed H Atoms',
+                                                 'Oxidation States']),
+                         ('Temperature Testing Data',
+                          temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
                                                       'Edge Features Optimised Combined', 'Edge Indices Combined',
                                                       'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
 
@@ -129,9 +134,9 @@ if run_choice == '1':
                 testing_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)                     # Run data creator in test mode.
 
                 (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
-                 energy_input_features, uncertain_features, num_fixed, num_H, oxidation_states) = testing_features                        # Extract every aspect of testing data that will be saved.
+                 energy_input_features, uncertain_features, num_fixed, num_H, oxidation_states) = testing_features      # Extract every aspect of testing data that will be saved.
 
-                with open(f'Diffusion Testing Data/{diffusion_test_filename}', mode='a', newline='') as file:                                       # Append mode.
+                with open(f'Diffusion Testing Data/{diffusion_test_filename}', mode='a', newline='') as file:           # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str(node_features[0]), str(edge_features[0]), str(edge_indices[0]),
@@ -140,7 +145,7 @@ if run_choice == '1':
 
                 print(f"Saved diffusion testing data for {compound} to CSV.")
 
-                with open(f'Energy Testing Data/{energy_test_filename}', mode='a', newline='') as file:                                          # Append mode.
+                with open(f'Energy Testing Data/{energy_test_filename}', mode='a', newline='') as file:                 # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'[{compound}-H, {compound}, H-({compound})]', str([0, node_features[1], 0]),
@@ -150,7 +155,7 @@ if run_choice == '1':
 
                 print(f"Saved energy testing data for {compound} CRYSTAL ALONE to CSV.")
 
-                with open(f'Temperature Testing Data/{temperature_test_filename}', mode='a', newline='') as file:                                     # Append mode.
+                with open(f'Temperature Testing Data/{temperature_test_filename}', mode='a', newline='') as file:       # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
                         [f'{compound}', str([0]), str([0]), str(edge_indices[0]), str(uncertain_features),
@@ -182,7 +187,6 @@ elif run_choice == '3':
 
     else:
         pass
-
 
 elif run_choice == '4':
 

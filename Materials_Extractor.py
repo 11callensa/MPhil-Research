@@ -8,10 +8,11 @@ from ase.io import read
 from dotenv import load_dotenv
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.analysis.phase_diagram import PhaseDiagram
+from pymatgen.io.xyz import XYZ
 
 load_dotenv()
 
-key = os.getenv("MATERIALS_KEY")
+key = os.getenv("MATERIALS_KEY")                                                                                        # Set the Materials Project key in the .env file.
 
 
 def extract_hydrogen(file_path):
@@ -39,11 +40,11 @@ def extract_hydrogen(file_path):
 
 def extract_compound(material_id, name):
     """
-        Takes in the Material Project ID and extracts coordinates and features of the compound.
+        Takes in the Material Project ID and extracts coordinates and system features of the compound.
 
         :param: material_id: Materials Project ID.
         :param: name: Chemical name of the compound.
-        :return: Compound coordinates.
+        :return: Compound coordinates, oxidation states and system features.
     """
 
     with MPRester(key) as m:                                                                                            # Access API using key.
@@ -77,8 +78,7 @@ def extract_compound(material_id, name):
         shear_reuss = None
         poisson_ratio = None
 
-
-        if elasticity_doc is not None:                                                                     # If there are mechanical properties, extract shear and bulk moduli and poisson's ratio
+        if elasticity_doc is not None:                                                                                  # If there are mechanical properties, extract shear and bulk moduli and poisson's ratio
             print('Inside elasticity doc bulk modulus.')
             bulk_voigt = elasticity_doc.bulk_modulus.voigt
             bulk_reuss = elasticity_doc.bulk_modulus.reuss
@@ -120,23 +120,23 @@ def extract_compound(material_id, name):
         cif_writer = CifWriter(conventional_structure)                                                                  # Save this unit cell in a .cif file.
         cif_writer.write_file(f"CIF Files/{name}_supercell.cif")
 
-        print(f"CIF file saved as '{name}_supercell.cif'.")
+        print(f"CIF file saved as '{name}_supercell.cif' in the folder 'CIF_Files.")
 
         task = True
         while task:                                                                                                     # Need to use VESTA as cannot extract the data from the variable conventional_structure.
             choice = input(
-                "Pause - 1) Open saved CIF file in Vesta. \n"
-                "2) Click Export Data and select VASP format - name the file in the format {chemical_name}_supercell.vasp.\n"
-                "3) Click Save and select 'Cartesian Coordinates'.\n"
-                "4) From the drop down menu select 'Output coordinates of all displayed atoms', click ok.\n"
-                "5) Return to the python program and type 'y' to continue: \n")
+            "Pause - 1) Open saved CIF file in Vesta. \n"
+            "2) Click Export Data and select VASP format - name the file in the format {chemical_name}_supercell.vasp.\n"
+            "3) Click Save and select 'Cartesian Coordinates'.\n"
+            "4) From the drop down menu select 'Output coordinates of all displayed atoms', click ok.\n"
+            "5) Return to the python program and type 'y' to continue: \n")
 
             if choice.lower() == 'y':                                                                                   # Once completed, mark the task as done.
                 task = False
             else:
                 print("Please complete the task and type 'y' to continue.")
 
-    with open(f"POSCAR Files/{name}_supercell.vasp", "r") as file:                                                      # Extract the ocntents of the .vasp file.
+    with open(f"POSCAR Files/{name}_supercell.vasp", "r") as file:                                                      # Extract the contents of the .vasp file.
         lines = file.readlines()
 
     atom_types = lines[5].split()                                                                                       # Extract atom types and their counts.
@@ -153,7 +153,7 @@ def extract_compound(material_id, name):
     xyz_format = []
     unique_atoms = set()
 
-    for symbol, pos in zip(atoms, positions):                                                                           # Store information in the desired format.
+    for symbol, pos in zip(atoms, positions):                                                                           # Store information in xyz format.
         xyz_format.append(f"{symbol} {pos[0]:.10f} {pos[1]:.10f} {pos[2]:.10f}")
         unique_atoms.add(symbol)
 

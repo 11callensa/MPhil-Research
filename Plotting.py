@@ -1,40 +1,52 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 
 def plot_crystal(positions, edge_indices):
     """
-        Plots a system of atoms and bonds in 3D space.
+        Plots a system of atoms and bonds in 3D space with a legend.
 
         :param positions: 3D coordinates of the system.
         :param edge_indices: Bonds between pairs of atoms.
     """
 
-    atom_coordinates = []                                                                                               # Parse positions into atom coordinates
+    atom_coordinates = []
 
     for position in positions:
-        parts = position.split()                                                                                        # Split each line into element and coordinates
+        parts = position.split()
         atom_coordinates.append(np.array([float(parts[1]), float(parts[2]), float(parts[3])]))
 
-    atom_coordinates = np.array(atom_coordinates)                                                                       # Convert atom_coordinates to a numpy array for easier manipulation.
+    atom_coordinates = np.array(atom_coordinates)
 
-    fig = plt.figure()                                                                                                  # Set up the plot.
+    fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2], c='b', marker='o', label='Atoms')# Plot atoms as scatter points (different colors for clarity).
+    # Plot atoms and assign the scatter object to a variable
+    scatter = ax.scatter(atom_coordinates[:, 0], atom_coordinates[:, 1], atom_coordinates[:, 2],
+                         c='r', marker='o', label='Atoms')
 
-    for bond in edge_indices:                                                                                           # Plot bonds as lines between the atoms defined by edge_indices.
+    # Plot bonds
+    for bond in edge_indices:
         i, j = bond
         ax.plot([atom_coordinates[i, 0], atom_coordinates[j, 0]],
                 [atom_coordinates[i, 1], atom_coordinates[j, 1]],
-                [atom_coordinates[i, 2], atom_coordinates[j, 2]], c='r', linestyle='-', linewidth=1)
+                [atom_coordinates[i, 2], atom_coordinates[j, 2]],
+                c='b', linestyle='-', linewidth=1)
 
-    ax.set_xlabel('X')                                                                                                  # Labels and title.
+    ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
     ax.set_title('3D Plot of Atoms and Bonds')
+
+    # Create custom legend handles
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Hydrogen Atoms',
+               markerfacecolor='r', markeredgecolor='k', markersize=8),
+        Line2D([0], [0], color='b', lw=2, label='Hydrogen Bonds')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
 
     plt.show()
 
@@ -88,7 +100,7 @@ def plot_adsorption_sites(layer_atoms, edge_indices, adsorption_sites_dict):
     coords = np.array(coords)
 
     # Plot atoms
-    ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c='blue', label='Surface Atoms', s=50)
+    ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c='blue', label='Bulk Atoms', s=50)
 
     # Plot bonds
     for i, j in edge_indices:

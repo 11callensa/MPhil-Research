@@ -27,7 +27,7 @@ def surface_finder(matrix):
             hull = ConvexHull(coordinates)                                                                              # Extract the convex hull.
             external_faces = []
 
-            for simplex in hull.simplices:                                                                              # Extracting all external faces.
+            for simplex in hull.simplices:                                                                              # Extract all external faces.
                 face_points = coordinates[simplex]
                 external_faces.append(face_points)
 
@@ -377,8 +377,6 @@ def tiler(atoms_list):
     return tiled_atoms
 
 
-
-
 def site_finder(layer_atoms, min_bond=1.0, max_bond=3.0, z_tol=1e-3):
     """
     Identifies top, bridge, and hollow adsorption sites on the topmost atomic layer.
@@ -461,7 +459,7 @@ def coverage_atomsnm2_to_ML(coverage_atoms_per_nm2, tiled_xyz, adsorption_sites)
     return coverage_ML
 
 
-def place_hydrogen(tiled_xyz, adsorption_sites, coverage, hydrogen_bond, height_above=6.0, min_distance=3.0):
+def place_hydrogen(tiled_xyz, adsorption_sites, coverage, hydrogen_bond, height_above=6.0, min_distance=4.0):
     """
     Places H2 molecules evenly across the top surface with spacing constraint.
 
