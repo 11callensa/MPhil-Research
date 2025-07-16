@@ -8,6 +8,8 @@ import Energy_Model_Compound
 import Energy_Model_H
 import Temperature_Model
 
+from Displacement_Model import PreProcess, MinMaxNormalizer
+
 run_choice = input("Enter 1) Feature extraction mode, 2) Fully test a material mode, 3) Train a SINGLE model mode, "
                    "4) Test a SINGLE preloaded model mode: ")
 
@@ -167,11 +169,14 @@ if run_choice == '1':
                 print(f"Error processing {compound}: {e}")
 
 elif run_choice == '2':
-    Displacement_Model.run_testing()
+
+    name = input('Type in the name of the adsorbent you want to test: ')
+
+    Displacement_Model.run_testing(name)
 
 elif run_choice == '3':
 
-    model_choice = input("Which model do you want to train? 1) Optimisation Model, 2) Energy Combined Model"
+    model_choice = input("Which model do you want to train? 1) Optimisation Model, 2) Energy Combined Model "
                          "3) Energy Compound Model, 4) Energy H Model or 5) Temperature Model: ")
 
     if model_choice == '1':
@@ -194,16 +199,18 @@ elif run_choice == '4':
                          "1) Optimisation Model, 2) Energy Combined Model, 3) Energy Compound Model,"
                          "4) Energy H model or 5) Temperature Model")
 
+    name = input('Type in the name of the adsorbent you want to test: ')
+
     if model_choice == '1':
-        Displacement_Model.run_testing()
+        Displacement_Model.run_testing(name)
     elif model_choice == '2':
-        Energy_Model_Combined.run_testing()
+        Energy_Model_Combined.run_testing(name)
     elif model_choice == '3':
-        Energy_Model_Compound.run_testing()
+        Energy_Model_Compound.run_testing(name)
     elif model_choice == '4':
-        Energy_Model_H.run_testing()
+        Energy_Model_H.run_testing(name)
     elif model_choice == '5':
-        Temperature_Model.run_testing()
+        Temperature_Model.run_testing(name)
 
 
 

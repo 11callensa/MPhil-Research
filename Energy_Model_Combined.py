@@ -12,8 +12,11 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
 from torch_geometric.nn import GlobalAttention
 
+from Stats_Engineering import energy_features, test_residual_normality
+
 import matplotlib.pyplot as plt
 from tkinter import filedialog
+from collections import defaultdict
 
 device = torch.device("cpu")
 
@@ -321,7 +324,7 @@ class PreProcess:
         return [list(tup) for tup in zip(*denormalized_list)]
 
 
-def run_training():
+def run_training(sample=False):
 
     file_path = "energy_training.csv"
     data = load_training_data(file_path)
@@ -341,15 +344,29 @@ def run_training():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        # graph_array = graph_array[:, :4]
-        # Select columns 0, 1, 2, and 6
         graph_array = graph_array[:, [0, 1, 2, 6]]
         data['node_features'][i] = graph_array.tolist()
 
-    num_train = len(graph_indices) - 1
-    print('No. of training graphs: ', num_train)
-    train_indices = graph_indices[:num_train]
-    test_indices = graph_indices[num_train:]
+    if sample:
+        test_system_names = ["Rh-H", "Cu-H", "LaNiO3-H"]  # adjust names to match those in your dataset
+
+        test_indices = []
+        train_indices = []
+
+        for i, system_name in enumerate(data["system_names"]):
+            if system_name in test_system_names:
+                test_indices.append(i)
+            else:
+                train_indices.append(i)
+
+        train_sample_size = len(train_indices)
+        train_indices = [random.choice(train_indices) for _ in range(train_sample_size)]
+
+    else:
+        num_train = 29
+        print('No. of training graphs: ', num_train)
+        train_indices = graph_indices[:num_train]
+        test_indices = graph_indices[num_train:]
 
     def extract_by_indices(data_dict, key, indices):
         return [data_dict[key][i] for i in indices]
@@ -498,6 +515,40 @@ def run_training():
         print(f"{name:<30} | Predicted: {float(pred):.6f} eV | True: {float(true_val):.6f} eV")
         print(f"Percentage Error: {(true_val - pred) * 100 / (true_val)} %")
 
+    stats_choice = input('Do you want to perform feature engineering and statistical tests?: ')
+
+    if stats_choice == 'y':
+        # ================== MAE CALCULATION PER SYSTEM ================== #
+        mae_per_system = defaultdict(list)
+
+        for name, pred_en, true_en in zip(
+                all_system_names,
+                predicted_test_energy_denorm,
+                true_energy_denorm):
+            mae = abs(pred_en - true_en)
+            mae_per_system[name].append(mae)
+
+        print("\n===== Mean Absolute Error (MAE) per System =====")
+        for name in mae_per_system:
+            mean = np.mean(mae_per_system[name])
+            print(f"{name:<30} | MAE: {mean:.4f}")
+
+        # =================== FEATURE IMPORTANCE & ENGINEERING ================== #
+        energy_features(test_graphs, model)
+
+        # =================== RESIDUAL NORMALITY TEST ================== #
+        all_true = []
+        all_pred = []
+
+        for true_denorm, pred_denorm in zip(true_energy_denorm, predicted_test_energy_denorm):
+            all_true.append(true_denorm)
+            all_pred.append(pred_denorm)
+
+        all_true_graph = torch.tensor(all_true, dtype=torch.float32)
+        all_pred_graph = torch.tensor(all_pred, dtype=torch.float32)
+
+        test_residual_normality(all_true_graph, all_pred_graph)
+
     save_option = input('Do you want to save this model?: ')
 
     if save_option == 'y':
@@ -540,12 +591,24 @@ def run_training():
         print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
 
     else:
+        pass
+
+    test_system_names = [g.system_name for g in test_graphs]  # or however you load them
+    per_graph_mae = {}
+
+    for name, true_e, pred_e in zip(test_system_names, true_energy_denorm, predicted_test_energy_denorm):
+        mae = abs(true_e - pred_e)
+
+        per_graph_mae[name] = mae
+
+    if sample:
+        return per_graph_mae
+
+    else:
         return None
 
 
-def run_testing():
-
-    name = 'NiO'
+def run_testing(name):
 
     test_file_path = f"Energy Testing Data/{name}_energy_testing.csv"
     test_data = load_testing_data(test_file_path)
@@ -569,8 +632,6 @@ def run_testing():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        # graph_array = graph_array[:, :4]
-        # Select columns 0, 1, 2, and 6
         graph_array = graph_array[:, [0, 1, 2, 6]]
         test_data['node_features'][i] = graph_array.tolist()
 

@@ -45,7 +45,6 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     tiled_raw_xyz = tiler(rotated_xyz)
 
-    # tiled_raw_xyz = rotated_xyz
     tiled_xyz = parsing(tiled_raw_xyz)
     tiled_xyz.sort(key=lambda x: x.split()[0], reverse=True)
     print('Tiled XYZ: ', tiled_xyz)
@@ -61,34 +60,44 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     print("Edge Indices of the initial crystal alone: ", edge_indices_crystal)
 
-    # G = nx.Graph()
-    # G.add_edges_from([tuple(edge) for edge in edge_indices_crystal])
-    #
-    # # Step 2: Identify connected components
-    # connected_components = list(nx.connected_components(G))
-    #
-    # # Step 3: Keep only the largest component
-    # largest_component = max(connected_components, key=len)
-    #
-    # # Step 4: Filter atoms and edges
-    # largest_component_indices = sorted(largest_component)
-    #
-    # # Create a mapping from old index to new index
-    # index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(largest_component_indices)}
-    #
-    # # Filter atom list
-    # tiled_xyz_filtered = [tiled_xyz[i] for i in largest_component_indices]
-    #
-    # # Filter and remap edge indices
-    # edge_indices_filtered = [
-    #     [index_map[i], index_map[j]]
-    #     for i, j in edge_indices_crystal
-    #     if i in largest_component and j in largest_component
-    # ]
-    #
-    # # Use filtered data from now on
-    # tiled_xyz = tiled_xyz_filtered
-    # edge_indices_crystal = edge_indices_filtered
+    filter_choice = input('Are there any unconnected/irregular atoms that need to be filtered out? y/n: ')
+
+    if filter_choice == 'y':
+        G = nx.Graph()
+        G.add_edges_from([tuple(edge) for edge in edge_indices_crystal])
+
+        # Step 2: Identify connected components
+        connected_components = list(nx.connected_components(G))
+
+        # Step 3: Keep only the largest component
+        largest_component = max(connected_components, key=len)
+
+        # Step 4: Filter atoms and edges
+        largest_component_indices = sorted(largest_component)
+
+        # Create a mapping from old index to new index
+        index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(largest_component_indices)}
+
+        # Filter atom list
+        tiled_xyz_filtered = [tiled_xyz[i] for i in largest_component_indices]
+
+        # Filter and remap edge indices
+        edge_indices_filtered = [
+            [index_map[i], index_map[j]]
+            for i, j in edge_indices_crystal
+            if i in largest_component and j in largest_component
+        ]
+
+        # Use filtered data from now on
+        tiled_xyz = tiled_xyz_filtered
+        edge_indices_crystal = edge_indices_filtered
+
+        if save == 'y':
+            save_edges_to_csv(edge_indices_crystal, name)                                                               # Save the crystal edge indices.
+        else:
+            pass
+    else:
+        pass
 
     plot_crystal(tiled_xyz, edge_indices_crystal)
 
@@ -96,7 +105,6 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     print(f"The first {num_atoms} atoms are fixed.")
 
     ################## Crystal initial alone code ##################
-
     centered_xyz, center = centre_coords(tiled_xyz, num_atoms)
     print('Len of centred xyz: ', len(centered_xyz))
     print("Crystal center: ", center)

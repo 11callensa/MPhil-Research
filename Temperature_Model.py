@@ -11,10 +11,12 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.data import Data, DataLoader
 from torch_geometric.nn import GlobalAttention
-from torch_geometric.nn import SchNet
+
+from Stats_Engineering import temperature_features, test_residual_normality
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
+from collections import defaultdict
 
 device = torch.device("cpu")
 
@@ -299,7 +301,7 @@ class PreProcess:
         return [list(tup) for tup in zip(*denormalized_list)]
 
 
-def run_training():
+def run_training(sample=False):
 
     file_path = "temperature_training.csv"
     data = load_training_data(file_path)
@@ -308,10 +310,26 @@ def run_training():
     graph_indices = list(range(len(data['node_features'])))
     random.shuffle(graph_indices)
 
-    num_train = len(graph_indices) - 1
-    print('No. of training graphs: ', num_train)
-    train_indices = graph_indices[:num_train]
-    test_indices = graph_indices[num_train:]
+    if sample:
+        test_system_names = ["Rh", "Cu", "LaNiO3"]  # adjust names to match those in your dataset
+
+        test_indices = []
+        train_indices = []
+
+        for i, system_name in enumerate(data["system_names"]):
+            if system_name in test_system_names:
+                test_indices.append(i)
+            else:
+                train_indices.append(i)
+
+        train_sample_size = len(train_indices)
+        train_indices = [random.choice(train_indices) for _ in range(train_sample_size)]
+
+    else:
+        num_train = 29
+        print('No. of training graphs: ', num_train)
+        train_indices = graph_indices[:num_train]
+        test_indices = graph_indices[num_train:]
 
     def extract_by_indices(data_dict, key, indices):
         return [data_dict[key][i] for i in indices]
@@ -327,8 +345,6 @@ def run_training():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        # graph_array = graph_array[:, :4]
-        # Select columns 0, 1, 2, and 6
         graph_array = graph_array[:, [0, 1, 2, 6]]
         data['node_features'][i] = graph_array.tolist()
 
@@ -408,7 +424,7 @@ def run_training():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    epochs = 700
+    epochs = 400
 
     node_size = 4
     node_hidden_size = 128
@@ -433,7 +449,7 @@ def run_training():
 
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 27
+    batch_size_train = 29
     batch_size_test = 1
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
@@ -507,13 +523,58 @@ def run_training():
     true_ads_test_denorm = ads_normaliser.inverse_transform(all_true_ads)
     true_des_test_denorm = des_normaliser.inverse_transform(all_true_des)
 
-    print("\n--- Predicted vs True Energies ---")
+    print("\n--- Predicted vs True Temperatures ---")
     for name, pred_ads, pred_des, true_ads, true_des in zip(
             all_system_names, predicted_ads_test_temp_denorm,
             predicted_des_test_temp_denorm, true_ads_test_denorm,
             true_des_test_denorm):
         print(f"{name:<30} | Pred Ads: {pred_ads:<10.6f} | True Ads: {true_ads:<10.6f}")
         print(f"{'':<30} | Pred Des: {pred_des:<10.6f} | True Des: {true_des:<10.6f}\n")
+
+    stats_choice = input('Do you want to perform feature engineering and statistical tests?: ')
+
+    if stats_choice == 'y':
+        # ================== MAE CALCULATION PER SYSTEM ================== #
+        mae_ads_per_system = defaultdict(list)
+        mae_des_per_system = defaultdict(list)
+
+        for name, pred_ads, pred_des, true_ads, true_des in zip(
+                all_system_names,
+                predicted_ads_test_temp_denorm,
+                predicted_des_test_temp_denorm,
+                true_ads_test_denorm,
+                true_des_test_denorm):
+            # Compute absolute errors
+            mae_ads = abs(pred_ads - true_ads)
+            mae_des = abs(pred_des - true_des)
+
+            mae_ads_per_system[name].append(mae_ads)
+            mae_des_per_system[name].append(mae_des)
+
+        print("\n===== Mean Absolute Error (MAE) per System =====")
+        for name in mae_ads_per_system:
+            mean_ads = np.mean(mae_ads_per_system[name])
+            mean_des = np.mean(mae_des_per_system[name])
+            print(f"{name:<30} | Ads MAE: {mean_ads:.4f} | Des MAE: {mean_des:.4f}")
+
+        # =================== FEATURE IMPORTANCE & ENGINEERING ================== #
+        temperature_features(test_graphs, model)
+
+        # =================== RESIDUAL NORMALITY TEST ================== #
+        all_true_ads_tensor = torch.tensor(all_true_ads, dtype=torch.float32)
+        all_pred_ads_tensor = torch.tensor(all_predicted_ads, dtype=torch.float32)
+
+        all_true_des_tensor = torch.tensor(all_true_des, dtype=torch.float32)
+        all_pred_des_tensor = torch.tensor(all_predicted_des, dtype=torch.float32)
+
+        print("\nTesting residual normality for adsorption temperatures:")
+        test_residual_normality(all_true_ads_tensor, all_pred_ads_tensor)
+
+        print("\nTesting residual normality for desorption temperatures:")
+        test_residual_normality(all_true_des_tensor, all_pred_des_tensor)
+
+    else:
+        pass
 
     save_option = input('Do you want to save this model?: ')
 
@@ -558,12 +619,26 @@ def run_training():
         print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
 
     else:
+        pass
+
+    test_system_names = [g.system_name for g in test_graphs]  # or however you get the system names
+    per_graph_mae = {}
+
+    for name, true_ads, pred_ads, true_des, pred_des in zip(test_system_names, true_ads_test_denorm, predicted_ads_test_temp_denorm,
+                                        true_des_test_denorm, predicted_des_test_temp_denorm):
+
+        mae_ads = abs(true_ads - pred_ads)
+        mae_des = abs(true_des - pred_des)
+
+        per_graph_mae[name] = (mae_ads, mae_des)
+
+    if sample:
+        return per_graph_mae
+    else:
         return None
 
 
-def run_testing():
-
-    name = 'NiO'
+def run_testing(name):
 
     test_file_path = f"Temperature Testing Data/{name}_temperature_testing.csv"
     test_data = load_testing_data(test_file_path)
@@ -587,8 +662,6 @@ def run_testing():
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
-        # graph_array = graph_array[:, :4]
-        # Select columns 0, 1, 2, and 6
         graph_array = graph_array[:, [0, 1, 2, 6]]
         test_data['node_features'][i] = graph_array.tolist()
 
@@ -600,7 +673,7 @@ def run_testing():
     flat_nodes_test, test_node_sizes = flatten_graph_data(test_node_feats)
     flat_edges_test, test_edge_sizes = flatten_graph_data(test_edge_feats)
 
-    model_dir = "Energy Compound GNN Models"
+    model_dir = "Temperature GNN Models"
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
                                                  filetypes=[("PyTorch Models", "*.pt")])
 
@@ -682,9 +755,4 @@ def run_testing():
     predicted_ads_test_temp_denorm = ads_normaliser.inverse_transform(all_predicted_ads)
     predicted_des_test_temp_denorm = des_normaliser.inverse_transform(all_predicted_des)
 
-    print("\n--- Predicted vs True Energies ---")
-    for name, pred_ads, pred_des in zip(all_system_names, predicted_ads_test_temp_denorm,predicted_des_test_temp_denorm):
-        print(f"{name:<30} | Pred Ads: {pred_ads:<10.6f}")
-        print(f"{'':<30} | Pred Des: {pred_des:<10.6f}")
-
-    return pred_ads, pred_des
+    return predicted_ads_test_temp_denorm, predicted_des_test_temp_denorm
