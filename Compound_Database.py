@@ -29,15 +29,15 @@ def set_train_materials():
     # DONE compound = {'LaFeO3': 'mp-552676'}
     # compound = {'LaCoO3': 'mp-573180'}
     # DONE compound = {'GaN': 'mp-830'}
-    # compound = {'WC': 'mp-13136'}
+    # DONE compound = {'WC': 'mp-13136'}
     # DONE compound = {'TiC': 'mp-631'}
     # compound = {'Co2O4': 'mp-18748'}
     # DONE compound = {'ZnO': 'mp-1986'}
     # DONE compound = {'ZrO2': 'mp-2858'}
     # DONE compound = {'Y2O3': 'mp-673247'}
     # DONE compound =  {'Cr2O3': 'mp-776873'}
-    # compound = {'W': 'mp-91'}
-    # DONE compound = {'CuCr2O4': 'mp-1103973'}
+    # DONE compound = {'W': 'mp-91'}
+    # DONE compound = {'CuCr2O4': 'mp-504573'}
     # DONE compound = {'Fe': 'mp-150'}
     # DONE compound = {'Au': 'mp-81'}
     # DONE compound = {'Cu': 'mp-30'}
@@ -47,11 +47,11 @@ def set_train_materials():
     # DONE compound = {'Ir': 'mp-101'}
     # DONE compound = {'Rh': 'mp-74'}
     # DONE compound = {'Al': 'mp-134'}
-    # compound = {'Ta': 'mp-50'}
+    # compound = {'Ta': 'mp-6986'}
     # compound = {'Co': 'mp-102'}
     # DONE compound = {'Nb': 'mp-75'}
     # DONE compound = {'GaAs': 'mp-2534'}
-    compound = {'Re': 'mp-8642'}
+    # DONE compound = {'Re': 'mp-8642'}
     # DONE compound = {'SnO2':'mp-856'}
 
     return hydrogen, compound

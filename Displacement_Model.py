@@ -21,7 +21,7 @@ from Stats_Engineering import disp_features, test_residual_normality
 import Energy_Model_H
 import Energy_Model_Combined
 import Energy_Model_Compound
-import Temperature_Model
+import NEW_Temperature_Model
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -1047,8 +1047,16 @@ def run_testing(name):
     temp_choice = input(f'Do you want to predict adsorption & desorption temperatures for {name}? y/n: ')
 
     if temp_choice == 'y':
-        ads_prediction, des_prediction = Temperature_Model.run_testing(name)
+        print('\nSelect an Adsorption Model First')
 
-        print("\n--- Predicted Adsorption & Desorption Temperatures ---")
+        ads_prediction = NEW_Temperature_Model.run_testing(name)
+
+        print("\n--- Predicted Adsorption Temperature ---")
         print(f"{name:<30} | Predicted Adsorption Temperature: {ads_prediction:<10.6f}")
-        print(f"{'':<30} | Predicted Desorption Temperature: {des_prediction:<10.6f}")
+        print('\n Now select a Desorption Model')
+
+        des_prediction = NEW_Temperature_Model.run_testing(name)
+
+        print("\n--- Predicted Desorption Temperature ---")
+        print(f"{name:<30} | Predicted Desorption Temperature: {des_prediction:<10.6f}")
+        print('\n Predicting complete')

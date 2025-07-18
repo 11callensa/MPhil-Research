@@ -225,6 +225,10 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     print("TEST Energy inputs: ", energy_inputs_test)
 
+    temperature_inputs_test = [0, 0, 0, 0, extracted_input_features[0]]
+
+    print('TEST Temperature inputs: ', temperature_inputs_test)
+
     if test_train == '1':
 
         optimised_xyz_raw = (optimise_geometry(combined_xyz, num_atoms, name))
@@ -321,7 +325,7 @@ def data_creator(hydrogen, compound_ID, name, test_train):
     elif test_train == '2':
 
         return [node_features_test, edge_features_test, edge_indices, diffusion_inputs, diffusion_input_xyz,
-                energy_inputs_test, uncertain_features, num_atoms, num_H, oxidation_states]
+                energy_inputs_test, temperature_inputs_test, uncertain_features, num_atoms, num_H, oxidation_states]
 
     else:
         return None

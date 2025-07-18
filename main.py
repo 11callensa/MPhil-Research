@@ -6,7 +6,7 @@ import Displacement_Model
 import Energy_Model_Combined
 import Energy_Model_Compound
 import Energy_Model_H
-import Temperature_Model
+import NEW_Temperature_Model
 
 from Displacement_Model import PreProcess, MinMaxNormalizer
 
@@ -118,7 +118,8 @@ if run_choice == '1':
                          ('Temperature Testing Data',
                           temperature_test_filename, ['Compound', 'Node Features Optimised Combined',
                                                       'Edge Features Optimised Combined', 'Edge Indices Combined',
-                                                      'Uncertain Features', 'Num. Fixed Atoms', 'Placed H Atoms'])]
+                                                      'Temperature Input Features', 'Uncertain Features',
+                                                      'Num. Fixed Atoms', 'Placed H Atoms'])]
 
             for folder, filename, header in file_data:
                 try:                                                                                                    # Try creating the file in exclusive ('x') mode.
@@ -136,7 +137,8 @@ if run_choice == '1':
                 testing_features = data_creator(hydrogen, compound_ID, compound, test_train_choice)                     # Run data creator in test mode.
 
                 (node_features, edge_features, edge_indices, diffusion_input_features, diffusion_init_coords,
-                 energy_input_features, uncertain_features, num_fixed, num_H, oxidation_states) = testing_features      # Extract every aspect of testing data that will be saved.
+                 energy_input_features, temperature_input_features, uncertain_features, num_fixed, num_H,
+                 oxidation_states) = testing_features      # Extract every aspect of testing data that will be saved.
 
                 with open(f'Diffusion Testing Data/{diffusion_test_filename}', mode='a', newline='') as file:           # Append mode.
                     writer = csv.writer(file)
@@ -160,8 +162,8 @@ if run_choice == '1':
                 with open(f'Temperature Testing Data/{temperature_test_filename}', mode='a', newline='') as file:       # Append mode.
                     writer = csv.writer(file)
                     writer.writerow(
-                        [f'{compound}', str([0]), str([0]), str(edge_indices[0]), str(uncertain_features),
-                         str(num_fixed), str(num_H)])
+                        [f'{compound}', str([0]), str([0]), str(edge_indices[0]), str(temperature_input_features),
+                         str(uncertain_features), str(num_fixed), str(num_H)])
 
                 print(f"Saved temperature data for {compound} to CSV.")
 
@@ -188,8 +190,17 @@ elif run_choice == '3':
     elif model_choice == '4':
         Energy_Model_H.run_training()
     elif model_choice == '5':
-        Temperature_Model.run_training()
+        while True:
+            temp_choice = input('\nWould you like to train a 1) adsorption or 2) desorption model? ')
 
+            if temp_choice == '1':
+                NEW_Temperature_Model.run_training('ads')
+                break
+            elif temp_choice == '2':
+                NEW_Temperature_Model.run_training('des')
+                break
+            else:
+                print('Invalid input, try again.')
     else:
         pass
 
@@ -210,7 +221,8 @@ elif run_choice == '4':
     elif model_choice == '4':
         Energy_Model_H.run_testing(name)
     elif model_choice == '5':
-        Temperature_Model.run_testing(name)
+        print('\nCarefully select either an adsorption or desorption model')
+        NEW_Temperature_Model.run_testing(name)
 
 
 

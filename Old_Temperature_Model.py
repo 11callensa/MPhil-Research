@@ -756,3 +756,6 @@ def run_testing(name):
     predicted_des_test_temp_denorm = des_normaliser.inverse_transform(all_predicted_des)
 
     return predicted_ads_test_temp_denorm, predicted_des_test_temp_denorm
+
+
+run_training()
