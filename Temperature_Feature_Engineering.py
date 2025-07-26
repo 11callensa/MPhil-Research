@@ -336,11 +336,12 @@ def feature_names(indices, name_map):
 # Print results
 print("\nBest Average Train Loss:")
 print(f"  Train Loss: {best_train['avg_train_loss']:.5f}")
+print(f"  Corresponding Test Loss: {best_train['avg_test_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_train['features'], FEATURE_NAMES)}")
-
 
 print("\nBest Average Test Loss:")
 print(f"  Test Loss: {best_test['avg_test_loss']:.5f}")
+print(f"  Corresponding Train Loss: {best_test['avg_train_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_test['features'], FEATURE_NAMES)}")
 
 print("\nBest Combined (Train + Test) Loss:")

@@ -13,7 +13,7 @@ from torch_geometric.data import Data, DataLoader
 from tqdm import tqdm
 
 
-device = torch.device("mps")
+device = torch.device("cuda")
 
 print("Device:", device)
 
@@ -634,14 +634,15 @@ def feature_names(indices, name_map):
     return [name_map[i] for i in indices]
 
 
-# Print results
 print("\nBest Average Train Loss:")
 print(f"  Train Loss: {best_train['avg_train_loss']:.5f}")
+print(f"  Corresponding Test Loss: {best_train['avg_test_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_train['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(best_train['edge_features'], EDGE_FEATURE_NAMES)}")
 
 print("\nBest Average Test Loss:")
 print(f"  Test Loss: {best_test['avg_test_loss']:.5f}")
+print(f"  Corresponding Train Loss: {best_test['avg_train_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_test['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(best_test['edge_features'], EDGE_FEATURE_NAMES)}")
 
