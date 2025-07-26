@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
 
-import Energy_Model_H
-import Energy_Model_Combined
-import Energy_Model_Compound
+import Old_Energy_Model_H
+import Old_Energy_Model_Combined
+import Old_Energy_Model_Compound
 
 
 trials = 2

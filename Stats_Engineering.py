@@ -1,6 +1,7 @@
 import torch
 from captum.attr import IntegratedGradients
 from scipy.stats import shapiro
+import shap
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -243,6 +244,29 @@ def temperature_features(test_graphs, model, mode='node'):
         plt.ylabel("Mean Attribution (All Atoms)")
         plt.title(f"Global Node Feature Attribution for {output_name}")
         plt.show()
+
+
+def temperature_shap_test(X_train_norm, X_test_norm, model):
+    # Use a small subset for SHAP to avoid memory issues
+    X_background = X_train_norm[:10]
+    X_explain = X_test_norm[:2]
+
+    # Define a wrapper function for the model
+    def model_forward(x_numpy):
+        x_tensor = torch.tensor(x_numpy, dtype=torch.float32)
+        with torch.no_grad():
+            preds = model(x_tensor).squeeze()
+            if preds.dim() == 0:
+                preds = preds.unsqueeze(0)
+            return preds.detach().cpu().numpy()
+
+    # Use KernelExplainer for tabular models with small input size
+    explainer = shap.KernelExplainer(model_forward, X_background.numpy())
+    shap_values = explainer.shap_values(X_explain.numpy())
+
+    # Plot feature importance
+    feature_names = ["Feature 1", "Feature 2", "Feature 3", "Feature 4"]
+    shap.summary_plot(shap_values, features=X_explain.numpy(), feature_names=feature_names, plot_type="bar")
 
 
 def displacement_errors(pred_disp, true_disp, elements, num_fixed):

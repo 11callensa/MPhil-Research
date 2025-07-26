@@ -3,9 +3,9 @@ import csv
 from Compound_Database import set_train_materials, set_test_materials
 from Training_Creator_New import data_creator
 import Displacement_Model
-import Energy_Model_Combined
-import Energy_Model_Compound
-import Energy_Model_H
+import Old_Energy_Model_Combined
+import Old_Energy_Model_Compound
+import Old_Energy_Model_H
 import NEW_Temperature_Model
 
 from Displacement_Model import PreProcess, MinMaxNormalizer
@@ -191,7 +191,7 @@ elif run_choice == '3':
         Energy_Model_H.run_training()
     elif model_choice == '5':
         while True:
-            temp_choice = input('\nWould you like to train a 1) adsorption or 2) desorption model? ')
+            temp_choice = input('\nWould you like to train a 1) adsorption or 2) desorption model?: ')
 
             if temp_choice == '1':
                 NEW_Temperature_Model.run_training('ads')
@@ -208,7 +208,7 @@ elif run_choice == '4':
 
     model_choice = input("Which type of model do you want to perform an individual test with? "
                          "1) Optimisation Model, 2) Energy Combined Model, 3) Energy Compound Model,"
-                         "4) Energy H model or 5) Temperature Model")
+                         "4) Energy H model or 5) Temperature Model: ")
 
     name = input('Type in the name of the adsorbent you want to test: ')
 
@@ -221,7 +221,7 @@ elif run_choice == '4':
     elif model_choice == '4':
         Energy_Model_H.run_testing(name)
     elif model_choice == '5':
-        print('\nCarefully select either an adsorption or desorption model')
+        print('\nCarefully select either an adsorption or desorption model: \n')
         NEW_Temperature_Model.run_testing(name)
 
 

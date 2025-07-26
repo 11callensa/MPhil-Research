@@ -3,22 +3,20 @@ import os
 import numpy as np
 import pandas as pd
 import random
-import time
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-from torch_optimizer import AdaBelief
 
 from sklearn.model_selection import train_test_split
 
-from Stats_Engineering import temperature_features, test_residual_normality
+from Stats_Engineering import temperature_shap_test, test_residual_normality
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
 from collections import defaultdict
 
-device = torch.device("cuda")
+device = torch.device("mps")
 
 print("Device:", device)
 
@@ -31,16 +29,16 @@ class FCNN(nn.Module):
         self.fc1 = nn.Linear(hidden_size, hidden_size2)
         self.fc2 = nn.Linear(hidden_size2, output_dim)
 
-        self.relu = nn.SiLU()
+        self.silu = nn.SiLU()
 
     def forward(self, x):
 
         x = self.input(x)
-        x = self.relu(x)
+        x = self.silu(x)
         x = self.fc1(x)
-        x = self.relu(x)
+        x = self.silu(x)
         x = self.fc2(x)
-        x = self.relu(x)
+        x = self.silu(x)
 
         return x
 
@@ -78,7 +76,7 @@ class MinMaxNormalizer:
         return [f * (self.max - self.min + 1e-8) + self.min for f in data]
 
 
-class PreProcess:
+class Temp_PreProcess:
     def __init__(self):
         self.normalizers = []
         self.num_feats = None
@@ -194,6 +192,10 @@ def run_training(mode='ads', sample=False):
         for i in range(len(data['system_features']))
     ]
 
+    # raw_inputs = [
+    #     data['uncertain_features'][i][2:3] for i in range(len(data['system_features']))
+    # ]
+
     if mode == 'ads':
         raw_outputs = [[float(pair[0])] for pair in data['temp_outputs']]
     elif mode == 'des':
@@ -204,7 +206,7 @@ def run_training(mode='ads', sample=False):
     system_names = data['system_names']
 
     if sample:
-        test_materials = ["Rh", "Cu", "LaNiO3"]  # Fixed test set
+        test_materials = ["Pd", "Au"]  # Fixed test set
 
         # Separate test set
         X_test, y_test, names_test = [], [], []
@@ -268,14 +270,15 @@ def run_training(mode='ads', sample=False):
             X_train, X_test, y_train, y_test, names_train, names_test = train_test_split(
                 raw_inputs, raw_outputs, data['system_names'], test_size=0.05)
 
-    input_normalizer = PreProcess()
+    input_normalizer = Temp_PreProcess()
     input_normalizer.fit(X_train, num_feats=4)
 
     X_train_norm = input_normalizer.transform(X_train)
     X_test_norm = input_normalizer.transform(X_test)
 
-    output_normalizer = PreProcess()
+    output_normalizer = Temp_PreProcess()
     output_normalizer.fit(y_train, num_feats=1)
+
     y_train_norm = output_normalizer.transform(y_train)
     y_test_norm = output_normalizer.transform(y_test)
 
@@ -296,13 +299,15 @@ def run_training(mode='ads', sample=False):
     hidden_size2 = 2048
     output_size = 1
 
-    batch_size = 29
+    batch_size = 34
 
     model = FCNN(input_size, hidden_size, hidden_size2, output_size)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-    loss_func = nn.MSELoss()
 
-    epochs = 100
+    loss_func = nn.SmoothL1Loss()
+
+    epochs = 2000
+    # epochs = 20
     loss_train_list = []
     loss_test_list = []
 
@@ -364,6 +369,33 @@ def run_training(mode='ads', sample=False):
     plt.title(f'Train/Test Loss ({mode.capitalize()}orption Temp Only)')
     plt.show()
 
+    stats_choice = input('Do you want to perform feature engineering and statistical tests?: ')
+
+    if stats_choice == 'y':
+        # ================== MAE CALCULATION PER SYSTEM ================== #
+        mae_per_system = defaultdict(list)
+
+        for name, pred, true in zip(names_test, preds_denorm, true_vals_denorm):
+
+            mae = abs(pred[0] - true[0])
+            mae_per_system[name].append(mae)
+
+            print(f"{name:<30} | MAE: {mae:.4f}")
+
+        # =================== FEATURE IMPORTANCE & ENGINEERING ================== #
+
+        temperature_shap_test(X_train_norm, X_test_norm, model)
+
+        # =================== RESIDUAL NORMALITY TEST ================== #
+        all_true_tensor = torch.tensor(true_vals_denorm, dtype=torch.float32)
+        all_preds_tensor = torch.tensor(preds_denorm, dtype=torch.float32)
+
+        print("\nTesting residual normality for adsorption temperatures:")
+        test_residual_normality(all_true_tensor, all_preds_tensor)
+
+    else:
+        pass
+
     if not sample:
 
         save_option = input('Do you want to save this model?: ')
@@ -385,6 +417,10 @@ def run_training(mode='ads', sample=False):
             model_dir = "Temperature GNN Models"  # Save the trained model in a folder along with its hyperparameters.
             os.makedirs(model_dir, exist_ok=True)
             model_save_path = os.path.join(model_dir, f"temperature_model_{model_name}.pt")
+
+            model = model.float()
+            for name, param in model.named_parameters():
+                print(f"{name}: {param.dtype}")
 
             # Bundle everything into one dictionary
             save_data = {
@@ -432,7 +468,9 @@ def run_testing(name):
         for i in range(len(test_data['system_features']))
     ]
 
-    print(raw_inputs)
+    # raw_inputs = [
+    #     test_data['uncertain_features'][i][:3] for i in range(len(test_data['system_features']))
+    # ]
 
     model_dir = "Temperature GNN Models"
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
@@ -444,7 +482,7 @@ def run_testing(name):
 
     print(f"Selected model: {model_file_path}")
 
-    model_data = model_data = torch.load(model_file_path, weights_only=False)
+    model_data = torch.load(model_file_path, weights_only=False)
 
     input_normaliser = model_data["normalisers"]['input_normaliser']
     output_normaliser = model_data["normalisers"]['output_normaliser']
@@ -462,6 +500,7 @@ def run_testing(name):
         output_dim=hyperparameters["output_size"]
     )
 
+    model = model.float()
     model.to(device)
 
     model.load_state_dict(model_data["model_state_dict"])  # Load the state_dict (weights).
@@ -472,6 +511,4 @@ def run_testing(name):
 
     pred_denorm = output_normaliser.inverse_process(pred)
 
-    print(pred_denorm)
-
-    return pred_denorm
+    return pred_denorm[0][0].item()

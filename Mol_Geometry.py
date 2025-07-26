@@ -329,6 +329,8 @@ def tiler(atoms_list):
     - tiled_atoms: List of strings in same format, tiled accordingly
     """
 
+    import numpy as np
+
     # Parse atomic entries into element list and position array
     elements = []
     coords = []
@@ -345,7 +347,7 @@ def tiler(atoms_list):
     dx = max_coords[0] - min_coords[0]
     dy = max_coords[1] - min_coords[1]
 
-    mode = input('Choose tiling mode: 1) 3x1  2) 2x2  3) 2x1  4) 4x4  5) 2x3: ')
+    mode = input('Choose tiling mode: 1) 3x1  2) 2x2  3) 2x1  4) 4x4  5) 2x3  6) 6x6: ')
 
     # Define shift vectors based on mode
     if mode == '2x2':
@@ -361,8 +363,11 @@ def tiler(atoms_list):
     elif mode == '2x3':
         shift_vectors = [np.array([i * dx, j * dy, 0])
                          for i in range(2) for j in range(3)]
+    elif mode == '6x6':
+        shift_vectors = [np.array([i * dx, j * dy, 0])
+                         for i in range(6) for j in range(6)]
     else:
-        raise ValueError("Invalid mode. Choose '2x2', '3x1', '2x1', '4x4', or '2x3'.")
+        raise ValueError("Invalid mode. Choose from '2x2', '3x1', '2x1', '4x4', '2x3', or '6x6'.")
 
     # Generate tiled atoms
     tiled_atoms = []

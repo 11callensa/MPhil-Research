@@ -303,7 +303,7 @@ class PreProcess:
 
 def run_training(sample=False):
 
-    file_path = "temperature_training.csv"
+    file_path = "temperature_training_old.csv"
     data = load_training_data(file_path)
 
     random.seed(int(time.time()))
@@ -311,7 +311,7 @@ def run_training(sample=False):
     random.shuffle(graph_indices)
 
     if sample:
-        test_system_names = ["Rh", "Cu", "LaNiO3"]  # adjust names to match those in your dataset
+        test_system_names = ["GaAs", "Ir"]  # adjust names to match those in your dataset
 
         test_indices = []
         train_indices = []
@@ -558,6 +558,9 @@ def run_training(sample=False):
             print(f"{name:<30} | Ads MAE: {mean_ads:.4f} | Des MAE: {mean_des:.4f}")
 
         # =================== FEATURE IMPORTANCE & ENGINEERING ================== #
+
+        print(test_graphs)
+
         temperature_features(test_graphs, model)
 
         # =================== RESIDUAL NORMALITY TEST ================== #
@@ -758,4 +761,4 @@ def run_testing(name):
     return predicted_ads_test_temp_denorm, predicted_des_test_temp_denorm
 
 
-run_training()
+run_training(True)
