@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from tkinter import filedialog
 from collections import defaultdict
 
-device = torch.device("mps")
+device = torch.device("cuda")
 
 print("Device:", device)
 
