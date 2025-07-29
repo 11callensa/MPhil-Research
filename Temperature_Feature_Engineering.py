@@ -323,28 +323,53 @@ for select in selections:
 
 pbar.close()
 
+
+def feature_names(indices, name_map):
+    return [name_map[i] for i in indices]
+
 # Sort results
 best_train = min(results, key=lambda x: x["avg_train_loss"])
 best_test = min(results, key=lambda x: x["avg_test_loss"])
 best_combined = min(results, key=lambda x: x["avg_train_loss"] + x["avg_test_loss"])
 
-
-def feature_names(indices, name_map):
-    return [name_map[i] for i in indices]
-
+# Sort worst results
+worst_train = max(results, key=lambda x: x["avg_train_loss"])
+worst_test = max(results, key=lambda x: x["avg_test_loss"])
+worst_combined = max(results, key=lambda x: x["avg_train_loss"] + x["avg_test_loss"])
 
 # Print results
 print("\nBest Average Train Loss:")
 print(f"  Train Loss: {best_train['avg_train_loss']:.5f}")
-print(f"  Node Features: {feature_names(best_train['features'], FEATURE_NAMES)}")
+print(f"  Features: {feature_names(best_train['features'], FEATURE_NAMES)}")
 
 
 print("\nBest Average Test Loss:")
 print(f"  Test Loss: {best_test['avg_test_loss']:.5f}")
-print(f"  Node Features: {feature_names(best_test['features'], FEATURE_NAMES)}")
+print(f"  Features: {feature_names(best_test['features'], FEATURE_NAMES)}")
 
 print("\nBest Combined (Train + Test) Loss:")
 print(f"  Total Loss: {(best_combined['avg_train_loss'] + best_combined['avg_test_loss']):.5f}")
 print(f"  Train Loss: {best_combined['avg_train_loss']:.5f}")
 print(f"  Test Loss: {best_combined['avg_test_loss']:.5f}")
-print(f"  Node Features: {feature_names(best_combined['features'], FEATURE_NAMES)}")
+print(f"  Features: {feature_names(best_combined['features'], FEATURE_NAMES)}")
+
+# --- Worsts ---
+print("\nWorst Average Train Loss:")
+print(f"  Train Loss: {worst_train['avg_train_loss']:.5f}")
+print(f"  Features: {feature_names(worst_train['node_features'], FEATURE_NAMES)}")
+
+print("\nWorst Average Test Loss:")
+print(f"  Test Loss: {worst_test['avg_test_loss']:.5f}")
+print(f"  Features: {feature_names(worst_test['node_features'], FEATURE_NAMES)}")
+
+print("\nWorst Combined (Train + Test) Loss:")
+print(f"  Total Loss: {(worst_combined['avg_train_loss'] + worst_combined['avg_test_loss']):.5f}")
+print(f"  Train Loss: {worst_combined['avg_train_loss']:.5f}")
+print(f"  Test Loss: {worst_combined['avg_test_loss']:.5f}")
+print(f"  Features: {feature_names(worst_combined['node_features'], FEATURE_NAMES)}")
+
+print("\nAll Combinations and Losses:")
+for res in results:
+    feats = feature_names(res["node_features"], FEATURE_NAMES)
+    print(f"  Features: {feats} | "
+          f"Train Loss: {res['avg_train_loss']:.5f} | Test Loss: {res['avg_test_loss']:.5f}")

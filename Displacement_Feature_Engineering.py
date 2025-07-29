@@ -161,8 +161,8 @@ class GNN(nn.Module):
 
     def forward(self, node_features, edge_index, edge_features):
 
-        node_features = F.relu(self.node_feature_combiner(node_features))
-        edge_features = F.relu(self.edge_feature_combiner(edge_features))
+        node_features = F.silu(self.node_feature_combiner(node_features))
+        edge_features = F.silu(self.edge_feature_combiner(edge_features))
 
         def make_undirected(edge_index, edge_attr):
             edge_index_reversed = edge_index.flip(0)
@@ -173,7 +173,7 @@ class GNN(nn.Module):
         edge_index, edge_features = make_undirected(edge_index, edge_features)
 
         x = self.gnn1(node_features, edge_index, edge_features)
-        x = F.relu(x)
+        x = F.silu(x)
 
         displacement = self.fc_out(x)
 
@@ -291,7 +291,7 @@ def run_training(edge_select, node_select):
     # test_indices = graph_indices[num_train:]
 
     # Step 1: define test systems as chemical formula strings
-    test_formula_strings = ["Rh", "Cu", "LaNiO3"]
+    test_formula_strings = ["Cu", "TiO2-A"]
 
     # Step 2: convert them to sets of elements (ignoring counts)
     def formula_to_elements(formula):
@@ -389,23 +389,22 @@ def run_training(edge_select, node_select):
     epochs = 400
 
     node_size = len(node_select)
-    node_hidden_size = 128
-    node_output_size = 256
+    node_hidden_size = 32
+    node_output_size = 128
 
     edge_size = len(edge_select)
-    edge_hidden_size = 128
-    edge_output_size = 256
+    edge_hidden_size = 32
+    edge_output_size = 128
 
     hidden_size1 = 128
-    hidden_size2 = 1024
+    hidden_size2 = 256
     gnn_output_size = 3
 
     model = GNN(node_size, node_hidden_size, node_output_size,
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=300, gamma=0.8)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
     loss_train_list = []
     loss_test_list = []
@@ -551,8 +550,6 @@ def run_training(edge_select, node_select):
 
         avg_test_loss = test_loss / total_movable_atoms_test
 
-        scheduler.step()
-
         # if epoch % 10 == 0:
         #     print(f"Epoch {epoch}/{epochs} | Train Loss: {avg_train_loss:.6f} | Test Loss: {avg_test_loss:.6f}")
 
@@ -624,17 +621,21 @@ for edge_select in edge_selections:
 
 pbar.close()
 
+
+def feature_names(indices, name_map):
+    return [name_map[i] for i in indices]
+
 # Sort results
 best_train = min(results, key=lambda x: x["avg_train_loss"])
 best_test = min(results, key=lambda x: x["avg_test_loss"])
 best_combined = min(results, key=lambda x: x["avg_train_loss"] + x["avg_test_loss"])
 
+# Sort worst results
+worst_train = max(results, key=lambda x: x["avg_train_loss"])
+worst_test = max(results, key=lambda x: x["avg_test_loss"])
+worst_combined = max(results, key=lambda x: x["avg_train_loss"] + x["avg_test_loss"])
 
-def feature_names(indices, name_map):
-    return [name_map[i] for i in indices]
-
-
-# Print results
+# --- Bests ---
 print("\nBest Average Train Loss:")
 print(f"  Train Loss: {best_train['avg_train_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_train['node_features'], NODE_FEATURE_NAMES)}")
@@ -651,4 +652,24 @@ print(f"  Train Loss: {best_combined['avg_train_loss']:.5f}")
 print(f"  Test Loss: {best_combined['avg_test_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_combined['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(best_combined['edge_features'], EDGE_FEATURE_NAMES)}")
+
+# --- Worsts ---
+print("\nWorst Average Train Loss:")
+print(f"  Train Loss: {worst_train['avg_train_loss']:.5f}")
+print(f"  Node Features: {feature_names(worst_train['node_features'], NODE_FEATURE_NAMES)}")
+print(f"  Edge Features: {feature_names(worst_train['edge_features'], EDGE_FEATURE_NAMES)}")
+
+print("\nWorst Average Test Loss:")
+print(f"  Test Loss: {worst_test['avg_test_loss']:.5f}")
+print(f"  Node Features: {feature_names(worst_test['node_features'], NODE_FEATURE_NAMES)}")
+print(f"  Edge Features: {feature_names(worst_test['edge_features'], EDGE_FEATURE_NAMES)}")
+
+print("\nWorst Combined (Train + Test) Loss:")
+print(f"  Total Loss: {(worst_combined['avg_train_loss'] + worst_combined['avg_test_loss']):.5f}")
+print(f"  Train Loss: {worst_combined['avg_train_loss']:.5f}")
+print(f"  Test Loss: {worst_combined['avg_test_loss']:.5f}")
+print(f"  Node Features: {feature_names(worst_combined['node_features'], NODE_FEATURE_NAMES)}")
+print(f"  Edge Features: {feature_names(worst_combined['edge_features'], EDGE_FEATURE_NAMES)}")
+
+
 
