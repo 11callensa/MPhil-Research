@@ -638,11 +638,13 @@ worst_combined = max(results, key=lambda x: x["avg_train_loss"] + x["avg_test_lo
 # --- Bests ---
 print("\nBest Average Train Loss:")
 print(f"  Train Loss: {best_train['avg_train_loss']:.5f}")
+print(f"  Corresponding Test Loss: {best_train['avg_test_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_train['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(best_train['edge_features'], EDGE_FEATURE_NAMES)}")
 
 print("\nBest Average Test Loss:")
 print(f"  Test Loss: {best_test['avg_test_loss']:.5f}")
+print(f"  Corresponding Train Loss: {best_test['avg_train_loss']:.5f}")
 print(f"  Node Features: {feature_names(best_test['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(best_test['edge_features'], EDGE_FEATURE_NAMES)}")
 
@@ -656,11 +658,13 @@ print(f"  Edge Features: {feature_names(best_combined['edge_features'], EDGE_FEA
 # --- Worsts ---
 print("\nWorst Average Train Loss:")
 print(f"  Train Loss: {worst_train['avg_train_loss']:.5f}")
+print(f"  Corresponding Test Loss: {worst_train['avg_test_loss']:.5f}")
 print(f"  Node Features: {feature_names(worst_train['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(worst_train['edge_features'], EDGE_FEATURE_NAMES)}")
 
 print("\nWorst Average Test Loss:")
 print(f"  Test Loss: {worst_test['avg_test_loss']:.5f}")
+print(f"  Corresponding Train Loss: {worst_test['avg_train_loss']:.5f}")
 print(f"  Node Features: {feature_names(worst_test['node_features'], NODE_FEATURE_NAMES)}")
 print(f"  Edge Features: {feature_names(worst_test['edge_features'], EDGE_FEATURE_NAMES)}")
 
