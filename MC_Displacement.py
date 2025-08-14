@@ -2,6 +2,7 @@ import ast
 import random
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 import torch
 import torch.optim as optim
@@ -100,7 +101,7 @@ class FCNN_FeatureCombiner(nn.Module):
     def __init__(self, input_dim, hidden_size, output_dim):
         super(FCNN_FeatureCombiner, self).__init__()
 
-        self.input = nn.Linear(input_dim, output_dim)
+        self.input = nn.Linear(input_dim, hidden_size)
         self.fc1 = nn.Linear(hidden_size, output_dim)
         self.silu = nn.SiLU()
 
@@ -108,7 +109,7 @@ class FCNN_FeatureCombiner(nn.Module):
 
         x = self.input(x)
         x = self.silu(x)
-        # x = self.fc1(x)
+        x = self.fc1(x)
 
         return x
 
@@ -158,7 +159,11 @@ class GNN(nn.Module):
 
         self.gnn1 = MyCustomGNNLayer(output_node_dim, output_edge_dim, hidden_gnn_dim2)
 
-        self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
+        self.fc_out = nn.Sequential(
+            nn.Linear(hidden_gnn_dim2, 128),
+            nn.SiLU(),
+            nn.Linear(128, output_gnn_dim)
+        )
 
     def forward(self, node_features, edge_index, edge_features):
 
@@ -174,7 +179,7 @@ class GNN(nn.Module):
         edge_index, edge_features = make_undirected(edge_index, edge_features)
 
         x = self.gnn1(node_features, edge_index, edge_features)
-        x = F.relu(x)
+        x = F.silu(x)
 
         displacement = self.fc_out(x)
 
@@ -339,11 +344,11 @@ def split_back(flat_data, sizes):
     return result
 
 
-def run_training():
-
+def run_training(bootstrap=False):
     file_path = "diffusion_training.csv"
-    data = load_training_data(file_path)  # Load the diffusion data
+    data = load_training_data(file_path)
 
+    # Preprocessing (your existing code)
     element_lists = [[line.split()[0] for line in group] for group in data['output_coords']]
 
     data['displacements'] = []
@@ -353,44 +358,31 @@ def run_training():
         disp = np.array(data['output_coords'][i]) - np.array(data['initial_coords'][i])
         data['displacements'].append(disp.tolist())
 
-    for i, edge_feat in enumerate(data['edge_features']):
-        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
-        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
-        data['edge_features'][i] = edge_array.tolist()
-
     for i, graph in enumerate(data['node_features']):
-        graph_array = np.array(graph)  # shape (num_nodes, num_features)
-        coords = graph_array[:, :3]  # extract xyz
+        graph_array = np.array(graph)
+        coords = graph_array[:, :3]
         centroid = np.mean(coords, axis=0)
         centered_coords = coords - centroid
         graph_array[:, :3] = centered_coords
         graph_array = graph_array[:, [0, 1, 2, 3, 4, 5, 6]]
-
         data['node_features'][i] = graph_array.tolist()
 
-    test_systems = [
-        {"Rh"},
-        {"Cu"},
-        {"La", "Ni", "O"}  # LaNiO₃
-    ]
+    # Split train/test
+    test_formula_strings = ["Cu", "TiO2-A"]
+    test_indices = [i for i, name in enumerate(data["system_names"]) if name in test_formula_strings]
+    train_indices = [i for i, name in enumerate(data["system_names"]) if name not in test_formula_strings]
 
-    test_indices = []
-    train_indices = []
+    # Monte Carlo resampling
+    if bootstrap:
+        train_sample_size = len(train_indices)
+        train_indices = [random.choice(train_indices) for _ in range(train_sample_size)]
 
-    for i, elements in enumerate(element_lists):
-        # Remove all H atoms from the set
-        core_elements = set(e for e in elements if e != "H")
-
-        if core_elements in test_systems:
-            test_indices.append(i)
-        else:
-            train_indices.append(i)
-
+    # Extract data by indices
     def extract_by_indices(data_dict, key, indices):
         return [data_dict[key][i] for i in indices]
 
-    train_sample_size = len(train_indices)
-    train_indices = [random.choice(train_indices) for _ in range(train_sample_size)]
+    train_data = {k: extract_by_indices(data, k, train_indices) for k in data.keys()}
+    val_data = {k: extract_by_indices(data, k, test_indices) for k in data.keys()}
 
     train_node_feats = extract_by_indices(data, 'node_features', train_indices)
     train_edge_feats = extract_by_indices(data, 'edge_features', train_indices)
@@ -454,39 +446,39 @@ def run_training():
     train_graphs = [graph_list[i] for i in train_indices]
     test_graphs = [graph_list[i] for i in test_indices]
 
-    print("Train systems:")
-    for g in train_graphs:
-        print(" -", g.system_name)
+    # print("Train systems:")
+    # for g in train_graphs:
+    #     print(" -", g.system_name)
+    #
+    # print("\nTest systems:")
+    # for g in test_graphs:
+    #     print(" -", g.system_name)
 
-    print("\nTest systems:")
-    for g in test_graphs:
-        print(" -", g.system_name)
-
-    epochs = 1000
+    epochs = 3000
 
     node_size = 7
     node_hidden_size = 128
     node_output_size = 256
 
-    edge_size = 1
+    edge_size = 2
     edge_hidden_size = 128
     edge_output_size = 256
 
     hidden_size1 = 128
-    hidden_size2 = 1024
+    hidden_size2 = 256
     gnn_output_size = 3
 
     model = GNN(node_size, node_hidden_size, node_output_size,
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.00005)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=300, gamma=0.8)
 
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 29
-    batch_size_test = 3
+    batch_size_train = 30
+    batch_size_test = 2
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
     test_loader = DataLoader(test_graphs, batch_size_test, shuffle=False)
@@ -537,10 +529,12 @@ def run_training():
         test_loss = 0.0
         total_movable_atoms_test = 0
 
+        all_predicted_coords = []
         all_elements = []
         all_names = []
         all_true_disps = []
         all_pred_disps = []
+        all_initial_coords = []
         all_movable_masks = []
 
         with torch.no_grad():
@@ -579,12 +573,20 @@ def run_training():
                 # Inverse normalization and reconstruct predicted coords per graph
                 initial_coords_norm = batch.input_coords.clone()
                 initial_coords = coord_normaliser.inverse_process(initial_coords_norm.cpu().numpy())
+                initial_coords = torch.tensor(initial_coords, dtype=torch.float, device=device)
+
+                true_coords_norm = batch.output_coords.clone()
+                true_coords = coord_normaliser.inverse_process(true_coords_norm.cpu().numpy())
+                true_coords = torch.tensor(true_coords, dtype=torch.float, device=device)
 
                 true_disp_denorm = disp_normaliser.inverse_process(batch.y.cpu().numpy())
                 final_disp_denorm = disp_normaliser.inverse_process(predicted_disp.cpu().numpy())
 
                 true_disp_denorm = torch.tensor(true_disp_denorm, dtype=torch.float, device=device)
                 final_disp_denorm = torch.tensor(final_disp_denorm, dtype=torch.float, device=device)
+
+                all_true_final_coords = []
+                all_pred_final_coords = []
 
                 start_idx = 0
                 for i, elements in enumerate(batch_elements):
@@ -598,13 +600,22 @@ def run_training():
                         device=device
                     )
 
-                    # Extract just this graph's data from full batch
-                    true_disp_graph = true_disp_denorm[start_idx:end_idx]
-                    pred_disp_graph = final_disp_denorm[start_idx:end_idx]
+                    init = initial_coords[start_idx:end_idx]
+                    true_coord_batch = true_coords[start_idx:end_idx]
+                    pred_disp = final_disp_denorm[start_idx:end_idx]
 
-                    # Save only per-graph tensors
-                    all_true_disps.append(true_disp_graph.cpu())
-                    all_pred_disps.append(pred_disp_graph.cpu())
+                    pred_coords = init.clone()
+                    pred_coords[movable_mask] = init[movable_mask] + pred_disp[movable_mask]
+
+                    # Store movable atoms only
+                    all_pred_final_coords.append(pred_coords[movable_mask].cpu())
+                    all_true_final_coords.append(true_coord_batch[movable_mask].cpu())
+
+                    # Existing storage
+                    all_predicted_coords.append(pred_coords.cpu())
+                    all_initial_coords.append(init.cpu())
+                    all_pred_disps.append(pred_disp.cpu())
+                    all_true_disps.append(batch.y[start_idx:end_idx].cpu())
                     all_movable_masks.append(movable_mask.cpu())
                     all_elements.append(elements)
                     all_names.append(batch.system_name[i])
@@ -613,70 +624,43 @@ def run_training():
 
         avg_test_loss = test_loss / total_movable_atoms_test
 
-        scheduler.step()
+        # print(f"Epoch {epoch + 1}: Train Loss = {avg_train_loss:.6f}, Test Loss = {avg_test_loss:.6f}")
 
-        if epoch % 10 == 0:
-            print(f"Epoch {epoch}/{epochs} | Train Loss: {avg_train_loss:.6f} | Test Loss: {avg_test_loss:.6f}")
+    all_true_final_coords = torch.cat(all_true_final_coords, dim=0)
+    all_pred_final_coords = torch.cat(all_pred_final_coords, dim=0)
 
-    per_graph_mae = {}
-    for i, (pred_disp, true_disp, movable_mask, name) in enumerate(
-            zip(all_pred_disps, all_true_disps, all_movable_masks, all_names)):
-        # pred_disp and true_disp are already displacements for all atoms in the graph
+    val_metric = torch.mean(torch.abs(all_pred_final_coords - all_true_final_coords)).item()
 
-        # Mask movable atoms only
-        pred_disp_masked = pred_disp[movable_mask]
-        true_disp_masked = true_disp[movable_mask]
-
-        mae = torch.mean(torch.abs(pred_disp_masked - true_disp_masked)).item()
-        per_graph_mae[name] = mae
-
-    return per_graph_mae
+    return val_metric
 
 
-trials = 50
-all_errors = []
 
-for trial in range(trials):
-    print(f"Running trial {trial + 1}/{trials}")
-    per_graph_error = run_training()  # returns dict: {system_name: mae}
-    all_errors.append(per_graph_error)
+def monte_carlo_training(run_training_func, num_runs=2):
+    """
+    Performs Monte Carlo training by resampling the training data with replacement.
+    Keeps validation data fixed.
+    Args:
+        run_training_func: your existing run_training function (modified to accept train indices)
+        num_runs: number of Monte Carlo repetitions
+    Returns:
+        metrics_list: list of validation metrics for each run
+    """
+    metrics_list = []
 
-# Step 1: Organize errors by system
-error_dict = defaultdict(list)
+    # Wrap loop with tqdm
+    for run in tqdm(range(num_runs), desc="Monte Carlo Runs"):
+        # Run your training function, but resample training data
+        val_metric = run_training_func(bootstrap=True)
+        metrics_list.append(val_metric)
 
-for trial_errors in all_errors:
-    for system_name, error in trial_errors.items():
-        error_dict[system_name].append(error)
+    metrics_array = np.array(metrics_list)
+    mean_metric = np.mean(metrics_array)
+    ci_lower, ci_upper = np.percentile(metrics_array, [2.5, 97.5])
 
-# Step 2: Compute stats per system
-summary_stats = {}
+    print(f"Mean validation metric: {mean_metric:.4f}")
+    print(f"95% confidence interval: [{ci_lower:.4f}, {ci_upper:.4f}]")
+    return metrics_list, (mean_metric, ci_lower, ci_upper)
 
-for system_name, errors in error_dict.items():
-    errors_np = np.array(errors)
-    mean = np.mean(errors_np)
-    std = np.std(errors_np, ddof=1)  # sample std dev
-    ci95 = 1.96 * std / np.sqrt(len(errors_np))  # 95% confidence interval
 
-    summary_stats[system_name] = {
-        "mean": mean,
-        "std": std,
-        "ci95": ci95,
-        "all_errors": errors_np,
-    }
-
-# Step 3: Display summary
-print("\n===== Summary (Per Graph) =====")
-for system_name, stats in summary_stats.items():
-    print(f"{system_name:30s} | MAE: {stats['mean']:.4f} ± {stats['ci95']:.4f} (95% CI)")
-
-# Step 4: Optional histogram (aggregate across all systems)
-all_mae_values = [error for stats in summary_stats.values() for error in stats["all_errors"]]
-
-plt.figure(figsize=(8, 5))
-plt.hist(all_mae_values, bins=20, color="skyblue", edgecolor="black")
-plt.xlabel("Mean Absolute Error (Å)")
-plt.ylabel("Frequency")
-plt.title("Distribution of MAE across Monte Carlo Trials")
-plt.grid(True)
-plt.tight_layout()
-plt.show()
+# Example usage
+metrics, ci = monte_carlo_training(run_training, num_runs=50)
