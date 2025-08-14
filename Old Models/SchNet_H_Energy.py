@@ -514,7 +514,7 @@ def run_training():
             print("No model name entered. Exiting...")
             exit()
 
-        model_dir = "../Energy H GNN Models"  # Save the trained model in a folder along with its hyperparameters.
+        model_dir = "Energy H GNN Models"  # Save the trained model in a folder along with its hyperparameters.
         os.makedirs(model_dir, exist_ok=True)
         model_save_path = os.path.join(model_dir, f"energy_H_model_{model_name}.pt")
 
@@ -613,7 +613,7 @@ def run_testing():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    model_dir = "../Energy H GNN Models"  # Select the model to test.
+    model_dir = "Energy H GNN Models"  # Select the model to test.
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
                                                  filetypes=[("PyTorch Models", "*.pt")])
 
