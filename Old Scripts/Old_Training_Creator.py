@@ -4,7 +4,7 @@ from Materials_Extractor import extract_hydrogen, extract_compound, compute_bond
 from Plotting import plot_crystal, plot_external_surfaces
 from Mol_Geometry import surface_finder, compute_volume, centre_coords, place_hydrogen
 from External_Saving import save_edges_to_csv, load_existing_edges, save_original_xyz
-from DFT_New import calculate_energy, optimise_geometry
+from DFT import calculate_energy, optimise_geometry
 from Compound_Properties import get_spin, node_edge_features, mass_and_charge
 
 

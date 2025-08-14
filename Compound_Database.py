@@ -32,7 +32,7 @@ def set_train_materials():
     # DONE compound = {'ZnO': 'mp-1986'}
     # DONE compound = {'ZrO2': 'mp-2858'}
     # DONE compound = {'Y2O3': 'mp-673247'}
-    # DONE compound =  {'Cr2O3': 'mp-776873'}
+    # DONE compound = {'Cr2O3': 'mp-776873'}
     # DONE compound = {'W': 'mp-91'}
     # DONE compound = {'CuCr2O4': 'mp-504573'}
     # DONE compound = {'Fe': 'mp-150'}
@@ -73,5 +73,7 @@ def set_test_materials():
     # DONE compound = {'SiO2': 'mp-558891'}
     # DONE compound = {'Pt': 'mp-126'}
     # DONE compound = {'FeTi': 'mp-305'}
+
+    # DONE compound = {'B4C': 'mp-696746'}
 
     return hydrogen, compound

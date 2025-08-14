@@ -1,14 +1,14 @@
 import csv
 
 from Compound_Database import set_train_materials, set_test_materials
-from Training_Creator_New import data_creator
+from Training_Testing_Data_Creator import data_creator
+
 import Displacement_Model
-import Old_Energy_Model_Combined
-import Old_Energy_Model_Compound
-import Old_Energy_Model_H
-import NEW_Temperature_Model
+import Adsorption_Temperature_Model
+import Desorption_Temperature_Model
 
 from Displacement_Model import PreProcess, MinMaxNormalizer
+from Adsorption_Temperature_Model import Temp_PreProcess
 
 run_choice = input("Enter 1) Feature extraction mode, 2) Fully test a material mode, 3) Train a SINGLE model mode, "
                    "4) Test a SINGLE preloaded model mode: ")
@@ -178,52 +178,31 @@ elif run_choice == '2':
 
 elif run_choice == '3':
 
-    model_choice = input("Which model do you want to train? 1) Optimisation Model, 2) Energy Combined Model "
-                         "3) Energy Compound Model, 4) Energy H Model or 5) Temperature Model: ")
+    model_choice = input("Which model do you want to train? 1) Adsorbed State Model, 2) Adsorption Temperature Model"
+                         "or 3) Desorption Temperature Model: ")
 
     if model_choice == '1':
         Displacement_Model.run_training()
     elif model_choice == '2':
-        Energy_Model_Combined.run_training()
+        Adsorption_Temperature_Model.run_training()
     elif model_choice == '3':
-        Energy_Model_Compound.run_training()
-    elif model_choice == '4':
-        Energy_Model_H.run_training()
-    elif model_choice == '5':
-        while True:
-            temp_choice = input('\nWould you like to train a 1) adsorption or 2) desorption model?: ')
-
-            if temp_choice == '1':
-                NEW_Temperature_Model.run_training('ads')
-                break
-            elif temp_choice == '2':
-                NEW_Temperature_Model.run_training('des')
-                break
-            else:
-                print('Invalid input, try again.')
+        Desorption_Temperature_Model.run_training()
     else:
         pass
 
 elif run_choice == '4':
 
-    model_choice = input("Which type of model do you want to perform an individual test with? "
-                         "1) Optimisation Model, 2) Energy Combined Model, 3) Energy Compound Model,"
-                         "4) Energy H model or 5) Temperature Model: ")
-
     name = input('Type in the name of the adsorbent you want to test: ')
+
+    model_choice = input("Which type of model do you want to perform an individual test with? "
+                         "1) Adsorbed State Model, 2) Adsorption Temperature Model or 3) Desorption Temperature"
+                         "Model: ")
 
     if model_choice == '1':
         Displacement_Model.run_testing(name)
     elif model_choice == '2':
-        Energy_Model_Combined.run_testing(name)
+        Adsorption_Temperature_Model.run_testing(name)
     elif model_choice == '3':
-        Energy_Model_Compound.run_testing(name)
-    elif model_choice == '4':
-        Energy_Model_H.run_testing(name)
-    elif model_choice == '5':
-        print('\nCarefully select either an adsorption or desorption model: \n')
-        NEW_Temperature_Model.run_testing(name)
-
-
-
-
+        Desorption_Temperature_Model.run_testing(name)
+    else:
+        pass

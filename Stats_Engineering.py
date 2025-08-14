@@ -37,52 +37,9 @@ class DispGNNWrapper(torch.nn.Module):
         return output[:, self.output_dim]  # return only one displacement component per atom
 
 
-class EnergyGNNWrapper(torch.nn.Module):
-    def __init__(self, model, edge_index, edge_attr, batch, mode='node'):
-        super().__init__()
-        self.model = model
-        self.edge_index = edge_index
-        self.edge_attr = edge_attr
-        self.batch = batch
-        self.mode = mode  # if you want to support different modes
-
-    def forward(self, node_features):
-        # Here you pass the node_features, edge_index, edge_attr, batch to your model
-        # Your model returns a scalar per graph, but make sure output shape is (1,) or (batch_size,1)
-        output = self.model(node_features, self.edge_index, self.edge_attr, self.batch)
-
-        # If output is a scalar tensor (0-dim), unsqueeze to make shape (1,)
-        if output.dim() == 0:
-            output = output.unsqueeze(0)
-
-        # output shape now (1,) or (batch_size, 1)
-        return output
-
-
-class TemperatureGNNWrapper(torch.nn.Module):
-    def __init__(self, model, edge_index, edge_attr, batch, mode='node'):
-        super().__init__()
-        self.model = model
-        self.edge_index = edge_index
-        self.edge_attr = edge_attr
-        self.batch = batch
-        self.mode = mode  # to keep interface consistent
-
-    def forward(self, node_features):
-        # model returns shape (batch_size, 2)
-        output = self.model(node_features, self.edge_index, self.edge_attr, self.batch)
-
-        # If single graph, output shape might be (2,), unsqueeze to (1,2)
-        if output.dim() == 1:
-            output = output.unsqueeze(0)
-
-        # Output shape: (batch_size, 2)
-        return output
-
-
 def disp_features(test_graphs, model):
-# ========== Setup ==========
-    sample = test_graphs[0]
+    # ========== Setup ==========
+    sample = test_graphs[1]
     node_features = sample.x.clone().detach().requires_grad_(True)
     edge_index = sample.edge_index
     edge_attr = sample.edge_attr
@@ -94,159 +51,56 @@ def disp_features(test_graphs, model):
 
     feature_names = ["x", "y", "z", "mass", "protons", "neutrons", "electrons"]
 
-    # ================ NODE FEATURE ➝ ALL NODES' DISPLACEMENT ============ #
+    # ========== Attribution Calculation ==========
     all_attributions = np.zeros((num_atoms, num_features, num_outputs))
 
     for output_dim in range(num_outputs):
         wrapped_model = DispGNNWrapper(model, edge_index, edge_attr, output_dim, mode='node')
         ig = IntegratedGradients(wrapped_model)
-
-        attributions, delta = ig.attribute(
-            inputs=node_features,
-            baselines=baseline,
-            return_convergence_delta=True
-        )
+        attributions, _ = ig.attribute(inputs=node_features,
+                                       baselines=baseline,
+                                       return_convergence_delta=True)
         all_attributions[:, :, output_dim] = attributions.detach().cpu().numpy()
 
-    # Mean attribution over displacement axes (X, Y, Z)
+    # ========== Per-Atom Heatmap ==========
     mean_attr_per_atom = np.mean(np.abs(all_attributions), axis=2)
     threshold = 1e-5
     nonzero_rows = np.where(np.any(mean_attr_per_atom > threshold, axis=1))[0]
 
-    plt.figure(figsize=(10, len(nonzero_rows) * 0.3 + 2))
+    fig, ax = plt.subplots(figsize=(10, len(nonzero_rows) * 0.3 + 2))
     sns.heatmap(mean_attr_per_atom[nonzero_rows],
                 cmap='coolwarm',
                 center=0,
                 yticklabels=nonzero_rows,
-                xticklabels=feature_names)
-    plt.title(f'Node Feature Attribution Heatmap\n(Showing {len(nonzero_rows)} atoms)')
-    plt.xlabel('Node Feature')
-    plt.ylabel('Atom Index')
+                xticklabels=feature_names,
+                ax=ax,
+                cbar_kws={"label": "Mean Absolute Attribution (unitless)"})
+
+    # Show all ticks, but only label every 10th
+    ax.set_yticks(np.arange(len(nonzero_rows)))
+    y_labels = [str(nonzero_rows[i]) if i % 10 == 0 else "" for i in range(len(nonzero_rows))]
+    ax.set_yticklabels(y_labels)
+
+    ax.set_title(f'Node Feature Attribution Heatmap\n(Showing {len(nonzero_rows)} atoms)')
+    ax.set_xlabel('Node Feature')
+    ax.set_ylabel('Atom Index')
+    plt.tight_layout()
     plt.show()
 
-    # ================ GLOBAL NODE FEATURE IMPORTANCE ============ #
+    # ========== Global Feature Importance ==========
     abs_attr = np.abs(all_attributions)
     global_feature_importance = np.mean(abs_attr, axis=(0, 2))
 
     plt.figure(figsize=(10, 4))
     sns.barplot(x=feature_names, y=global_feature_importance)
     plt.xlabel("Node Feature")
-    plt.ylabel("Mean Attribution (X + Y + Z, All Atoms)")
-    plt.title("Global Node Feature Attribution across All Displacements")
+    plt.ylabel("Mean Absolute Attribution (unitless)")
+    plt.title("Global Node Feature Attribution (Averaged Over All Atoms and Axes)")
+    plt.tight_layout()
     plt.show()
 
 
-def energy_features(test_graphs, model, mode='node'):
-    # Use a single graph for visualization
-    sample = test_graphs[0]
-    node_features = sample.x.clone().detach().requires_grad_(True)
-    edge_index = sample.edge_index
-    edge_attr = sample.edge_attr
-    batch = sample.batch if hasattr(sample, 'batch') else torch.zeros(len(sample.x), dtype=torch.long).to(model.device)
-
-    feature_names = ["x", "y", "z", "mass", "protons", "neutrons", "electrons"][:node_features.shape[1]]
-
-    baseline = torch.zeros_like(node_features)
-
-    wrapped_model = EnergyGNNWrapper(model, edge_index, edge_attr, batch, mode=mode)
-
-    ig = IntegratedGradients(wrapped_model)
-    attributions, delta = ig.attribute(
-        inputs=node_features,
-        baselines=baseline,
-        return_convergence_delta=True
-    )
-
-    attributions_np = attributions.detach().cpu().numpy()
-    mean_attr_per_atom = np.abs(attributions_np)  # shape: (num_atoms, num_features)
-
-    # Visualize attribution per atom
-    threshold = 0.001e-5
-    nonzero_rows = np.where(np.any(mean_attr_per_atom > threshold, axis=1))[0]
-
-    plt.figure(figsize=(10, len(nonzero_rows) * 0.3 + 2))
-    sns.heatmap(mean_attr_per_atom[nonzero_rows],
-                cmap='coolwarm',
-                center=0,
-                yticklabels=nonzero_rows,
-                xticklabels=feature_names)
-    plt.title(f'Node Feature Attribution Heatmap for Energy Prediction\n(Showing {len(nonzero_rows)} atoms)')
-    plt.xlabel('Node Feature')
-    plt.ylabel('Atom Index')
-    plt.show()
-
-    # Global feature importance
-    global_feature_importance = np.mean(mean_attr_per_atom, axis=0)
-
-    plt.figure(figsize=(10, 4))
-    sns.barplot(x=feature_names, y=global_feature_importance)
-    plt.xlabel("Node Feature")
-    plt.ylabel("Mean Attribution (All Atoms)")
-    plt.title("Global Node Feature Attribution for Energy Prediction")
-    plt.show()
-
-
-def temperature_features(test_graphs, model, mode='node'):
-    sample = test_graphs[0]  # single graph for visualization
-
-    node_features = sample.x.clone().detach().requires_grad_(True)
-    edge_index = sample.edge_index
-    edge_attr = sample.edge_attr
-    batch = sample.batch if hasattr(sample, 'batch') else torch.zeros(len(sample.x), dtype=torch.long).to(model.device)
-
-    feature_names = ["x", "y", "z", "mass", "protons", "neutrons", "electrons"][:node_features.shape[1]]
-    baseline = torch.zeros_like(node_features)
-
-    wrapped_model = TemperatureGNNWrapper(model, edge_index, edge_attr, batch, mode=mode)
-    ig = IntegratedGradients(wrapped_model)
-
-    attributions_list = []
-    delta_list = []
-
-    for target_idx in range(2):  # 2 outputs
-        attr, delta = ig.attribute(
-            inputs=node_features,
-            baselines=baseline,
-            target=target_idx,
-            return_convergence_delta=True
-        )
-        attributions_list.append(attr.detach().cpu().numpy())
-        delta_list.append(delta.detach().cpu().numpy())
-
-    attributions = np.stack(attributions_list)  # shape (2, num_atoms, num_features)
-    delta = np.stack(delta_list)
-
-    for i, output_name in enumerate(['Output 1', 'Output 2']):
-        mean_attr_per_atom = np.abs(attributions[i])  # shape: (num_atoms, num_features)
-
-        threshold = 1e-5
-        nonzero_rows = np.where(np.any(mean_attr_per_atom > threshold, axis=1))[0]
-        if len(nonzero_rows) == 0:
-            print(f"No atoms with attribution above threshold for {output_name}, showing all.")
-            nonzero_rows = np.arange(mean_attr_per_atom.shape[0])
-
-        plt.figure(figsize=(10, len(nonzero_rows)*0.3 + 2))
-        sns.heatmap(mean_attr_per_atom[nonzero_rows],
-                    cmap='coolwarm',
-                    center=0,
-                    yticklabels=nonzero_rows,
-                    xticklabels=feature_names)
-        plt.title(f'Node Feature Attribution Heatmap for {output_name}')
-        plt.xlabel('Node Feature')
-        plt.ylabel('Atom Index')
-        plt.show()
-
-        global_feature_importance = np.mean(mean_attr_per_atom, axis=0)
-
-        plt.figure(figsize=(10, 4))
-        sns.barplot(x=feature_names, y=global_feature_importance)
-        plt.xlabel("Node Feature")
-        plt.ylabel("Mean Attribution (All Atoms)")
-        plt.title(f"Global Node Feature Attribution for {output_name}")
-        plt.show()
-
-
-def temperature_shap_test(X_train_norm, X_test_norm, model):
+def ads_temperature_shap_test(X_train_norm, X_test_norm, model):
     # Use a small subset for SHAP to avoid memory issues
     X_background = X_train_norm[:10]
     X_explain = X_test_norm[:2]
@@ -264,9 +118,68 @@ def temperature_shap_test(X_train_norm, X_test_norm, model):
     explainer = shap.KernelExplainer(model_forward, X_background.numpy())
     shap_values = explainer.shap_values(X_explain.numpy())
 
-    # Plot feature importance
-    feature_names = ["Feature 1", "Feature 2", "Feature 3", "Feature 4"]
-    shap.summary_plot(shap_values, features=X_explain.numpy(), feature_names=feature_names, plot_type="bar")
+    # Plot feature importance using custom bar plot
+    feature_names = ["Bulk Modulus", "Shear Modulus", "Poisson's Ratio", "Energy above Hull",
+                     "Average Electronegativity"]
+
+    # If shap_values is a list (e.g., for multi-output), take the first output
+    if isinstance(shap_values, list):
+        shap_values = shap_values[0]
+
+    # Compute mean absolute SHAP values
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+
+    # Sort by importance
+    sorted_idx = np.argsort(mean_abs_shap)
+    sorted_shap = mean_abs_shap[sorted_idx]
+    sorted_names = np.array(feature_names)[sorted_idx]
+
+    # Custom bar plot
+    plt.figure(figsize=(8, 4))
+    plt.barh(range(len(sorted_shap)), sorted_shap, color='skyblue')
+    plt.yticks(range(len(sorted_shap)), sorted_names)
+    plt.xlabel("Mean SHAP Value (Influence on Prediction)", fontsize=12)
+    plt.title("Feature Importance from SHAP", fontsize=14)
+    plt.tight_layout()
+    plt.show()
+
+
+def des_temperature_shap_test(X_train_norm, X_test_norm, model):
+
+    # Ensure NumPy arrays
+    X_background = np.array(X_train_norm[:10])
+    X_explain = np.array(X_test_norm[:2])
+
+    # Model forward function
+    def model_forward(x_numpy):
+        return model.predict(x_numpy)
+
+    explainer = shap.KernelExplainer(model_forward, X_background)
+    shap_values = explainer.shap_values(X_explain)
+
+    feature_names = [
+        "Bulk Modulus",
+        "Shear Modulus",
+        "Poisson's Ratio",
+        "Energy above Hull",
+        "Average Electronegativity"
+    ]
+
+    if isinstance(shap_values, list):
+        shap_values = shap_values[0]
+
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+    sorted_idx = np.argsort(mean_abs_shap)
+    sorted_shap = mean_abs_shap[sorted_idx]
+    sorted_names = np.array(feature_names)[sorted_idx]
+
+    plt.figure(figsize=(8, 4))
+    plt.barh(range(len(sorted_shap)), sorted_shap, color='skyblue')
+    plt.yticks(range(len(sorted_shap)), sorted_names)
+    plt.xlabel("Mean SHAP Value (Influence on Prediction)", fontsize=12)
+    plt.title("Feature Importance from SHAP", fontsize=14)
+    plt.tight_layout()
+    plt.show()
 
 
 def displacement_errors(pred_disp, true_disp, elements, num_fixed):
@@ -315,9 +228,12 @@ def test_residual_normality(true_displacements, predicted_displacements, plot=Tr
 
         plt.figure(figsize=(12, 5))
 
+        # Histogram
         plt.subplot(1, 2, 1)
         plt.hist(residuals_flat, bins=30, alpha=0.7, color='skyblue', edgecolor='black')
         plt.title("Histogram of Residuals")
+        plt.xlabel("Residuals (y_true - y_pred)")
+        plt.ylabel("Frequency")
 
         plt.subplot(1, 2, 2)
         sm.qqplot(residuals_flat, line='s')

@@ -4,17 +4,18 @@ import numpy as np
 import pandas as pd
 
 import torch
-import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
-from torch_geometric.data import Data, DataLoader
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 
 from Stats_Engineering import disp_features, test_residual_normality
 
-import NEW_Energy_Model
-import NEW_Temperature_Model
-from NEW_Temperature_Model import Temp_PreProcess
+import Energy_Model
+import Adsorption_Temperature_Model
+import Desorption_Temperature_Model
+from Adsorption_Temperature_Model import Temp_PreProcess
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
@@ -105,15 +106,17 @@ class FCNN_FeatureCombiner(nn.Module):
     def __init__(self, input_dim, hidden_size, output_dim):
         super(FCNN_FeatureCombiner, self).__init__()
 
-        self.input = nn.Linear(input_dim, output_dim)
+        self.input = nn.Linear(input_dim, hidden_size)
         self.fc1 = nn.Linear(hidden_size, output_dim)
+
         self.silu = nn.SiLU()
 
     def forward(self, x):
 
         x = self.input(x)
         x = self.silu(x)
-        # x = self.fc1(x)
+        x = self.fc1(x)
+        # x = self.silu(x)
 
         return x
 
@@ -163,12 +166,18 @@ class GNN(nn.Module):
 
         self.gnn1 = MyCustomGNNLayer(output_node_dim, output_edge_dim, hidden_gnn_dim2)
 
-        self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
+        # self.fc_out = nn.Linear(hidden_gnn_dim2, output_gnn_dim)
+
+        self.fc_out = nn.Sequential(
+            nn.Linear(hidden_gnn_dim2, 128),
+            nn.SiLU(),
+            nn.Linear(128, output_gnn_dim)
+        )
 
     def forward(self, node_features, edge_index, edge_features):
 
-        node_features = F.relu(self.node_feature_combiner(node_features))
-        edge_features = F.relu(self.edge_feature_combiner(edge_features))
+        node_features = F.silu(self.node_feature_combiner(node_features))
+        edge_features = F.silu(self.edge_feature_combiner(edge_features))
 
         def make_undirected(edge_index, edge_attr):
             edge_index_reversed = edge_index.flip(0)
@@ -179,7 +188,8 @@ class GNN(nn.Module):
         edge_index, edge_features = make_undirected(edge_index, edge_features)
 
         x = self.gnn1(node_features, edge_index, edge_features)
-        x = F.relu(x)
+        x = F.silu(x)
+        # x = self.gnn2(x, edge_index, edge_features)
 
         displacement = self.fc_out(x)
 
@@ -362,11 +372,6 @@ def run_training():
         disp = np.array(data['output_coords'][i]) - np.array(data['initial_coords'][i])
         data['displacements'].append(disp.tolist())
 
-    for i, edge_feat in enumerate(data['edge_features']):
-        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
-        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
-        data['edge_features'][i] = edge_array.tolist()
-
     for i, graph in enumerate(data['node_features']):
         graph_array = np.array(graph)  # shape (num_nodes, num_features)
         coords = graph_array[:, :3]  # extract xyz
@@ -377,28 +382,13 @@ def run_training():
 
         data['node_features'][i] = graph_array.tolist()
 
-    # random.seed(int(time.time()))
-    # graph_indices = list(range(len(data['node_features'])))
-    # random.shuffle(graph_indices)
-    #
-    # num_train = 29
-    # train_indices = graph_indices[:num_train]
-    # test_indices = graph_indices[num_train:]
-
-    test_systems = [
-        {"Rh"},
-        {"Cu"},
-        {"La", "Ni", "O"}  # LaNiO₃
-    ]
+    test_formula_strings = ["Cu", "TiO2-A"]
 
     test_indices = []
     train_indices = []
 
-    for i, elements in enumerate(element_lists):
-        # Remove all H atoms from the set
-        core_elements = set(e for e in elements if e != "H")
-
-        if core_elements in test_systems:
+    for i, name in enumerate(data["system_names"]):
+        if name in test_formula_strings:
             test_indices.append(i)
         else:
             train_indices.append(i)
@@ -476,34 +466,33 @@ def run_training():
     for g in test_graphs:
         print(" -", g.system_name)
 
-    epochs = 1000
+    epochs = 3000
 
     node_size = 7
     node_hidden_size = 128
     node_output_size = 256
 
-    edge_size = 1
+    edge_size = 2
     edge_hidden_size = 128
     edge_output_size = 256
 
     hidden_size1 = 128
-    hidden_size2 = 1024
+    hidden_size2 = 256
     gnn_output_size = 3
 
     model = GNN(node_size, node_hidden_size, node_output_size,
                 edge_size, edge_hidden_size, edge_output_size,
                 hidden_size1, hidden_size2, gnn_output_size).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=300, gamma=0.8)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.00005)
 
     loss_train_list = []
     loss_test_list = []
 
     loss_func = nn.SmoothL1Loss()
 
-    batch_size_train = 29
-    batch_size_test = 3
+    batch_size_train = 30
+    batch_size_test = 2
 
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
     test_loader = DataLoader(test_graphs, batch_size_test, shuffle=False)
@@ -600,11 +589,18 @@ def run_training():
                 initial_coords = coord_normaliser.inverse_process(initial_coords_norm.cpu().numpy())
                 initial_coords = torch.tensor(initial_coords, dtype=torch.float, device=device)
 
+                true_coords_norm = batch.output_coords.clone()
+                true_coords = coord_normaliser.inverse_process(true_coords_norm.cpu().numpy())
+                true_coords = torch.tensor(true_coords, dtype=torch.float, device=device)
+
                 true_disp_denorm = disp_normaliser.inverse_process(batch.y.cpu().numpy())
                 final_disp_denorm = disp_normaliser.inverse_process(predicted_disp.cpu().numpy())
 
                 true_disp_denorm = torch.tensor(true_disp_denorm, dtype=torch.float, device=device)
                 final_disp_denorm = torch.tensor(final_disp_denorm, dtype=torch.float, device=device)
+
+                all_true_final_coords = []
+                all_pred_final_coords = []
 
                 start_idx = 0
                 for i, elements in enumerate(batch_elements):
@@ -619,20 +615,21 @@ def run_training():
                     )
 
                     init = initial_coords[start_idx:end_idx]
-
+                    true_coord_batch = true_coords[start_idx:end_idx]
                     pred_disp = final_disp_denorm[start_idx:end_idx]
-                    true_disp = batch.y[start_idx:end_idx]
 
                     pred_coords = init.clone()
                     pred_coords[movable_mask] = init[movable_mask] + pred_disp[movable_mask]
 
-                    # Store all data for analysis
+                    # Store movable atoms only
+                    all_pred_final_coords.append(pred_coords[movable_mask].cpu())
+                    all_true_final_coords.append(true_coord_batch[movable_mask].cpu())
+
+                    # Existing storage
                     all_predicted_coords.append(pred_coords.cpu())
                     all_initial_coords.append(init.cpu())
-
                     all_pred_disps.append(pred_disp.cpu())
-                    all_true_disps.append(true_disp.cpu())
-
+                    all_true_disps.append(batch.y[start_idx:end_idx].cpu())
                     all_movable_masks.append(movable_mask.cpu())
                     all_elements.append(elements)
                     all_names.append(batch.system_name[i])
@@ -641,7 +638,7 @@ def run_training():
 
         avg_test_loss = test_loss / total_movable_atoms_test
 
-        scheduler.step()
+        # scheduler.step()
 
         if epoch % 10 == 0:
             print(f"Epoch {epoch}/{epochs} | Train Loss: {avg_train_loss:.6f} | Test Loss: {avg_test_loss:.6f}")
@@ -659,19 +656,19 @@ def run_training():
 
     # Plot loss curves
     plt.figure()
-    plt.plot(loss_train_list, label="Train Loss")
-    plt.plot(loss_test_list, label="Test Loss")
+    plt.plot(loss_train_list, label="Training Loss")
+    plt.plot(loss_test_list, label="Validation Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend()
-    plt.title('Train Loss')
+    plt.title('Loss Plots')
     plt.show()
 
     stats_choice = input('Do you want to perform feature engineering and statistical tests?: ')
 
     if stats_choice == 'y':
-        # =================== RESIDUAL NORMALITY TEST ================== #
-        # Select only movable atoms' true and predicted displacements
+        # # =================== RESIDUAL NORMALITY DISPLACEMENT TEST ================== #
+        # # Select only movable atoms' true and predicted displacements
         all_true_movable = []
         all_pred_movable = []
 
@@ -686,12 +683,18 @@ def run_training():
         # Run residual normality test
         test_residual_normality(all_true_movable, all_pred_movable)
 
+        # =================== RESIDUAL NORMALITY COORDINATE TEST ================== #
+        all_true_final_coords = torch.cat(all_true_final_coords, dim=0)
+        all_pred_final_coords = torch.cat(all_pred_final_coords, dim=0)
+
+        test_residual_normality(all_true_final_coords, all_pred_final_coords)
+
         # =================== FEATURE IMPORTANCE & ENGINEERING ================== #
 
         disp_features(test_graphs, model)
 
         # ---------- PER-GRAPH DISPLACEMENT ERROR ANALYSIS FOR MOVABLE ATOMS ONLY ----------
-        idx = 2  # Graph index to inspect
+        idx = 1  # Graph index to inspect
 
         true_disp = all_true_disps[idx]
         movable_mask = all_movable_masks[idx]
@@ -799,11 +802,6 @@ def run_testing(name):
     for i in range(len(test_data['initial_coords'])):
         test_data['initial_coords'][i] = [[float(x) for x in line.split()[1:]] for line in test_data['initial_coords'][i]]
 
-    for i, edge_feat in enumerate(test_data['edge_features']):
-        edge_array = np.array(edge_feat)  # shape (num_edges, num_edge_features)
-        edge_array = edge_array[:, 0:1]  # keeps shape (num_edges, 1)
-        test_data['edge_features'][i] = edge_array.tolist()
-
     for i, graph in enumerate(test_data['node_features']):
         graph_array = np.array(graph)  # shape (num_nodes, num_features)
         coords = graph_array[:, :3]  # extract xyz
@@ -834,7 +832,7 @@ def run_testing(name):
 
     print(f"Selected model: {model_file_path}")
 
-    model_data = torch.load(model_file_path)
+    model_data = torch.load(model_file_path, weights_only=False)
 
     # Load normalisers from saved model data
     node_normaliser = model_data["normalisers"]['node_normaliser']
@@ -974,7 +972,7 @@ def run_testing(name):
 
     if energy_choice == 'y':
 
-        adsorption_energy = NEW_Energy_Model.run_testing(name)
+        adsorption_energy = Energy_Model.run_testing(name)
 
         print(f"{name:<30} | Predicted Adsorption Energy per H2 Molecule: {float(adsorption_energy):.6f} eV |")
 
@@ -983,17 +981,14 @@ def run_testing(name):
     if temp_choice == 'y':
         print('\nSelect an Adsorption Model First: \n')
 
-        ads_prediction = NEW_Temperature_Model.run_testing(name)
+        ads_prediction = Adsorption_Temperature_Model.run_testing(name, 'ads')
 
         print("\n--- Predicted Adsorption Temperature ---")
-        print(f"{name:<30} | Predicted Adsorption Temperature: {ads_prediction:<10.6f}")
+        print(f"{name:<30} | Predicted Adsorption Temperature: {ads_prediction:<10.2f}K")
         print('\n Now select a Desorption Model: \n')
 
-        des_prediction = NEW_Temperature_Model.run_testing(name)
+        des_prediction = Desorption_Temperature_Model.run_testing(name, 'des')
 
         print("\n--- Predicted Desorption Temperature ---")
-        print(f"{name:<30} | Predicted Desorption Temperature: {des_prediction:<10.6f}")
+        print(f"{name:<30} | Predicted Desorption Temperature: {des_prediction:<10.2f}K")
         print('\n Predicting complete')
-
-
-run_testing('NiO')

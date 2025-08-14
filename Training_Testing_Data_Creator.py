@@ -6,7 +6,7 @@ from Mol_Geometry import surface_finder, compute_volume, centre_coords, layer1_e
 
 from Build_Connections import build_connections
 from External_Saving import save_edges_to_csv, save_original_xyz
-from DFT_New import calculate_energy, optimise_geometry
+from DFT import calculate_energy, optimise_geometry
 from Compound_Properties import get_spin, node_edge_features, mass_and_charge
 
 import networkx as nx

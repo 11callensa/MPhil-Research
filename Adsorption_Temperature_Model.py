@@ -10,13 +10,13 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from sklearn.model_selection import train_test_split
 
-from Stats_Engineering import temperature_shap_test, test_residual_normality
+from Stats_Engineering import ads_temperature_shap_test
 
 import matplotlib.pyplot as plt
 from tkinter import filedialog
 from collections import defaultdict
 
-device = torch.device("cuda")
+device = torch.device("mps")
 
 print("Device:", device)
 
@@ -27,17 +27,25 @@ class FCNN(nn.Module):
 
         self.input = nn.Linear(input_dim, hidden_size)
         self.fc1 = nn.Linear(hidden_size, hidden_size2)
-        self.fc2 = nn.Linear(hidden_size2, output_dim)
+
+        self.fc2 = nn.Linear(hidden_size2, hidden_size2)
+        self.fc3 = nn.Linear(hidden_size2, output_dim)
 
         self.silu = nn.SiLU()
+        self.relu = nn.ReLU()
 
     def forward(self, x):
 
         x = self.input(x)
         x = self.silu(x)
+
         x = self.fc1(x)
-        x = self.silu(x)
+        x = self.relu(x)
+
         x = self.fc2(x)
+        x = self.silu(x)
+
+        x = self.fc3(x)
         x = self.silu(x)
 
         return x
@@ -182,31 +190,22 @@ def load_testing_data(csv_path):
     }
 
 
-def run_training(mode='ads', sample=False):
+def run_training(sample=False):
 
     file_path = "temperature_training.csv"
     data = load_training_data(file_path)
 
     raw_inputs = [
-        data['uncertain_features'][i][:3] + [data['system_features'][i][4]]
+        [data['uncertain_features'][i][j] for j in [0, 1, 2]] + data['system_features'][i][4:6]
         for i in range(len(data['system_features']))
-    ]
+    ]                                                                                                               # ADSORPTION - Bulk, Shear, Poisson, ENERGY TESTING
 
-    # raw_inputs = [
-    #     data['uncertain_features'][i][2:3] for i in range(len(data['system_features']))
-    # ]
-
-    if mode == 'ads':
-        raw_outputs = [[float(pair[0])] for pair in data['temp_outputs']]
-    elif mode == 'des':
-        raw_outputs = [[float(pair[1])] for pair in data['temp_outputs']]
-    else:
-        raise ValueError("mode must be either 'ads' or 'des'")
+    raw_outputs = [[float(pair[0])] for pair in data['temp_outputs']]
 
     system_names = data['system_names']
 
     if sample:
-        test_materials = ["Pd", "Au"]  # Fixed test set
+        test_materials = ["Cu", "TiO2-A"]  # Fixed test set
 
         # Separate test set
         X_test, y_test, names_test = [], [], []
@@ -233,21 +232,12 @@ def run_training(mode='ads', sample=False):
         names_train = [n for _, _, n in sampled_train]
 
     else:
-        material_choice = input('Do you want to select which materials to test on? y/n: ')
+
+        material_choice = 'y'
+
         if material_choice == 'y':
-            test_materials = []
-            print("Enter material names one at a time. Type 'done' when finished:")
 
-            while True:
-                mat = input("Material name: ")
-                if mat.lower() == 'done':
-                    break
-                elif mat.strip() == '':
-                    print("Empty input. Try again.")
-                    continue
-                else:
-                    test_materials.append(mat.strip())
-
+            test_materials = ['ZnO', 'Ir']
             print(f"Selected test materials: {test_materials}")
 
             X_train, y_train, names_train = [], [], []
@@ -271,7 +261,8 @@ def run_training(mode='ads', sample=False):
                 raw_inputs, raw_outputs, data['system_names'], test_size=0.05)
 
     input_normalizer = Temp_PreProcess()
-    input_normalizer.fit(X_train, num_feats=4)
+
+    input_normalizer.fit(X_train, num_feats=5)
 
     X_train_norm = input_normalizer.transform(X_train)
     X_test_norm = input_normalizer.transform(X_test)
@@ -294,25 +285,26 @@ def run_training(mode='ads', sample=False):
     train_dataset = TensorDataset(X_train_norm, y_train_norm)
     test_dataset = TensorDataset(X_test_norm, y_test_norm)
 
-    input_size = 4
-    hidden_size = 128
-    hidden_size2 = 2048
+    input_size = 5
+
+    hidden_size = 64
+    hidden_size2 = 128
     output_size = 1
 
-    batch_size = 34
+    batch_size = 33
 
     model = FCNN(input_size, hidden_size, hidden_size2, output_size)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.00007)
 
     loss_func = nn.SmoothL1Loss()
 
-    epochs = 2000
-    # epochs = 20
+    epochs = 1200
     loss_train_list = []
     loss_test_list = []
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=2, shuffle=False)
 
     for epoch in range(epochs):
         model.train()
@@ -355,107 +347,86 @@ def run_training(mode='ads', sample=False):
     preds_denorm = output_normalizer.inverse_process(all_preds_tensor)
     true_vals_denorm = output_normalizer.inverse_process(y_test_norm.numpy())
 
-    print(f"\n=== Final {mode.capitalize()}orption Temp Predictions vs Ground Truth ===")
+    preds_denorm = np.ravel(np.array(preds_denorm)).tolist()
+    true_vals_denorm = np.ravel(np.array(true_vals_denorm)).tolist()
+
+    print(f"\n=== Final Adsorption Temp Predictions vs Ground Truth ===")
     for name, pred, true in zip(names_test, preds_denorm, true_vals_denorm):
-        print(f"{name:<20} | Predicted: {pred[0]:.1f} | True: {true[0]:.1f}")
+
+        print(f"{name:<20} | Predicted: {pred:.1f} | True: {true:.1f}")
 
     # Plot
     plt.figure()
     plt.plot(loss_train_list, label="Train Loss")
-    plt.plot(loss_test_list, label="Test Loss")
+    plt.plot(loss_test_list, label="Validation Loss")
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend()
-    plt.title(f'Train/Test Loss ({mode.capitalize()}orption Temp Only)')
+    plt.title(f'Loss Plots')
     plt.show()
 
     stats_choice = input('Do you want to perform feature engineering and statistical tests?: ')
 
     if stats_choice == 'y':
-        # ================== MAE CALCULATION PER SYSTEM ================== #
-        mae_per_system = defaultdict(list)
+        # ================== AE CALCULATION PER SYSTEM ================== #
+        ae_per_system = defaultdict(list)
 
         for name, pred, true in zip(names_test, preds_denorm, true_vals_denorm):
 
-            mae = abs(pred[0] - true[0])
-            mae_per_system[name].append(mae)
+            ae = abs(pred - true)
+            ae_per_system[name].append(ae)
 
-            print(f"{name:<30} | MAE: {mae:.4f}")
+            print(f"{name:<30} | MAE: {ae:.4f}")
 
         # =================== FEATURE IMPORTANCE & ENGINEERING ================== #
 
-        temperature_shap_test(X_train_norm, X_test_norm, model)
-
-        # =================== RESIDUAL NORMALITY TEST ================== #
-        all_true_tensor = torch.tensor(true_vals_denorm, dtype=torch.float32)
-        all_preds_tensor = torch.tensor(preds_denorm, dtype=torch.float32)
-
-        print("\nTesting residual normality for adsorption temperatures:")
-        test_residual_normality(all_true_tensor, all_preds_tensor)
+        ads_temperature_shap_test(X_train_norm, X_test_norm, model)
 
     else:
         pass
 
-    if not sample:
+    save_option = input('Do you want to save this model?: ')
 
-        save_option = input('Do you want to save this model?: ')
+    if save_option == 'y':
 
-        if save_option == 'y':
+        hyperparameters = {
+            "input_size": input_size,
+            "hidden_size": hidden_size,
+            "hidden_size2": hidden_size2,
+            "output_size": output_size
+        }
 
-            hyperparameters = {
-                "input_size": input_size,
-                "hidden_size": hidden_size,
-                "hidden_size2": hidden_size2,
-                "output_size": output_size
-            }
+        model_name = input('Input the model name: ')
+        if not model_name:
+            print("No model name entered. Exiting...")
+            exit()
 
-            model_name = input('Input the model name: ')
-            if not model_name:
-                print("No model name entered. Exiting...")
-                exit()
+        model_dir = "Temperature Models"  # Save the trained model in a folder along with its hyperparameters.
+        os.makedirs(model_dir, exist_ok=True)
+        model_save_path = os.path.join(model_dir, f"temperature_model_{model_name}.pt")
 
-            model_dir = "Temperature GNN Models"  # Save the trained model in a folder along with its hyperparameters.
-            os.makedirs(model_dir, exist_ok=True)
-            model_save_path = os.path.join(model_dir, f"temperature_model_{model_name}.pt")
+        model = model.float()
+        for name, param in model.named_parameters():
+            print(f"{name}: {param.dtype}")
 
-            model = model.float()
-            for name, param in model.named_parameters():
-                print(f"{name}: {param.dtype}")
+        # Bundle everything into one dictionary
+        save_data = {
+            "model_state_dict": model.state_dict(),
+            "hyperparameters": hyperparameters,
+            "normalisers": {
+                'input_normaliser': input_normalizer,
+                'output_normaliser': output_normalizer,
+            },
+            "train_system_names": names_train
+        }
 
-            # Bundle everything into one dictionary
-            save_data = {
-                "model_state_dict": model.state_dict(),
-                "hyperparameters": hyperparameters,
-                "normalisers": {
-                    'input_normaliser': input_normalizer,
-                    'output_normaliser': output_normalizer,
-                },
-                "train_system_names": names_train
-            }
+        torch.save(save_data, model_save_path)
+        print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
 
-            torch.save(save_data, model_save_path)
-            print(f"Model, hyperparameters, normalisers, and system names saved at: {model_save_path}")
-
-        else:
-            pass
     else:
         pass
 
-    test_system_names = [name for name in names_test]  # or however you get the system names
-
-    per_graph_mae = {}
-
-    for name, true_val, pred_val in zip(test_system_names, true_vals_denorm, preds_denorm):
-
-        mae = abs(true_val[0] - pred_val[0])
-        print(f'\n MAE for {name}: {mae}')
-
-        per_graph_mae[name] = (mae)
-
-    if sample:
-        return per_graph_mae
-    else:
-        return None
+    return None
 
 
 def run_testing(name):
@@ -464,15 +435,11 @@ def run_testing(name):
     test_data = load_testing_data(test_file_path)
 
     raw_inputs = [
-        test_data['uncertain_features'][i][:3] + [test_data['system_features'][i][4]]
+        [test_data['uncertain_features'][i][j] for j in [0, 1, 2]] + test_data['system_features'][i][4:6]
         for i in range(len(test_data['system_features']))
     ]
 
-    # raw_inputs = [
-    #     test_data['uncertain_features'][i][:3] for i in range(len(test_data['system_features']))
-    # ]
-
-    model_dir = "Temperature GNN Models"
+    model_dir = "Temperature Models"
     model_file_path = filedialog.askopenfilename(title="Select Model to Test", initialdir=model_dir,
                                                  filetypes=[("PyTorch Models", "*.pt")])
 
