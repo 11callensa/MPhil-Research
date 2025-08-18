@@ -1,3 +1,5 @@
+import time
+
 import torch
 from ase.io import read
 from mace.calculators import MACECalculator
@@ -76,9 +78,14 @@ def run_testing(name):
     atoms_comp.calc = calc
     atoms_H.calc = calc
 
+    start_time = time.time()
+
     energy_comb = np.float32(atoms_comb.get_total_energy())
     energy_comp = np.float32(atoms_comp.get_total_energy())
     energy_H = np.float32(atoms_H.get_total_energy())
+
+    end_time = time.time()
+    print("Time spent predicting: ", end_time-start_time)
 
     num_h_atoms = len(atoms_H)
     num_h2_molecules = num_h_atoms // 2  # Assumes all hydrogens are in H2 molecules

@@ -2,6 +2,7 @@ import ast
 import os
 import numpy as np
 import pandas as pd
+import time
 
 import torch
 import torch.nn as nn
@@ -20,7 +21,7 @@ from Adsorption_Temperature_Model import Temp_PreProcess
 import matplotlib.pyplot as plt
 from tkinter import filedialog
 
-device = torch.device("mps")
+device = torch.device("cpu")
 
 print("Device:", device)
 
@@ -497,6 +498,8 @@ def run_training():
     train_loader = DataLoader(train_graphs, batch_size_train, shuffle=True)
     test_loader = DataLoader(test_graphs, batch_size_test, shuffle=False)
 
+    start_time = time.time()
+
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
@@ -645,6 +648,10 @@ def run_training():
 
         loss_train_list.append(avg_train_loss)
         loss_test_list.append(avg_test_loss)
+
+    end_time = time.time()
+
+    print("Training time (s): ", end_time-start_time)
 
     for i, (name, elements, coords) in enumerate(zip(all_names, all_elements, all_predicted_coords)):
         filename = f"Predicted Coords/{name}_predicted.xyz"
@@ -981,14 +988,17 @@ def run_testing(name):
     if temp_choice == 'y':
         print('\nSelect an Adsorption Model First: \n')
 
-        ads_prediction = Adsorption_Temperature_Model.run_testing(name, 'ads')
+        ads_prediction = Adsorption_Temperature_Model.run_testing(name)
 
         print("\n--- Predicted Adsorption Temperature ---")
         print(f"{name:<30} | Predicted Adsorption Temperature: {ads_prediction:<10.2f}K")
         print('\n Now select a Desorption Model: \n')
 
-        des_prediction = Desorption_Temperature_Model.run_testing(name, 'des')
+        des_prediction = Desorption_Temperature_Model.run_testing(name)
 
         print("\n--- Predicted Desorption Temperature ---")
         print(f"{name:<30} | Predicted Desorption Temperature: {des_prediction:<10.2f}K")
         print('\n Predicting complete')
+
+
+run_training()

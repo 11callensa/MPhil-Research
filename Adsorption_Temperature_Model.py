@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import random
+import time
 
 import torch
 import torch.nn as nn
@@ -306,6 +307,8 @@ def run_training(sample=False):
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=2, shuffle=False)
 
+    start_time = time.time()
+
     for epoch in range(epochs):
         model.train()
         epoch_train_loss = 0.0
@@ -342,6 +345,10 @@ def run_training(sample=False):
 
         loss_train_list.append(train_loss)
         loss_test_list.append(test_loss)
+
+    end_time = time.time()
+
+    print('Training time: ', end_time-start_time)
 
     all_preds_tensor = torch.cat(all_preds).unsqueeze(1).numpy()
     preds_denorm = output_normalizer.inverse_process(all_preds_tensor)

@@ -225,7 +225,7 @@ def data_creator(hydrogen, compound_ID, name, test_train):
 
     print("TEST Energy inputs: ", energy_inputs_test)
 
-    temperature_inputs_test = [0, 0, 0, 0, extracted_input_features[0]]
+    temperature_inputs_test = [0, 0, 0, 0, extracted_input_features[0], extracted_input_features[1]]
 
     print('TEST Temperature inputs: ', temperature_inputs_test)
 

@@ -70,10 +70,20 @@ def set_test_materials():
     # DONE compound = {'Mo': 'mp-8637'}
     # DONE compound = {'Si': 'mp-1491'}
     # DONE compound = {'In2O3': 'mp-22598'}
-    # DONE compound = {'SiO2': 'mp-558891'}
+    compound = {'SiO2': 'mp-558891'}
     # DONE compound = {'Pt': 'mp-126'}
     # DONE compound = {'FeTi': 'mp-305'}
-
     # DONE compound = {'B4C': 'mp-696746'}
+
+    # compound = {'Ag2O': 'mp-11872'}
+    # compound = {'CuO': 'mp-14549'}
+    # compound = {'Ga2O3': 'mp-886'}
+    # compound = {'WO3': 'mp-19390'}
+    # compound = {'La2O3': 'mp-2292'}
+    # compound = {'Sn': 'mp-1022725'}
+    # compound = {'Ti': 'mp-6985'}
+    # compound = {'Cr': 'mp-8633'}
+    # compound = {'Y': 'mp-9'}
+    # compound = {'Fe3O4': 'mp-510252'}
 
     return hydrogen, compound

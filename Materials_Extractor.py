@@ -8,6 +8,7 @@ from ase.io import read
 from dotenv import load_dotenv
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.analysis.phase_diagram import PhaseDiagram
+from pymatgen.core.periodic_table import Element
 from pymatgen.io.xyz import XYZ
 
 load_dotenv()
@@ -95,7 +96,16 @@ def extract_compound(material_id, name):
 
             avg_bulk, avg_shear, poisson_ratio = manual_input()
 
+        composition = material_data[0].composition
+        total_atoms = composition.num_atoms
+
+        # Weighted average electronegativity of all elements in the compound
+        avg_electronegativity = sum(
+            composition[el] * Element(str(el)).X for el in composition
+        ) / total_atoms
+
         print("Energy Above Hull: ", energy_above_hull)
+        print("Average Electronegativity: ", avg_electronegativity)
         print("Average Bulk Modulus: ", avg_bulk)
         print("Average Shear Modulus: ", avg_shear)
         print("Poisson's Ratio: ", poisson_ratio)
@@ -106,7 +116,7 @@ def extract_compound(material_id, name):
         print("Adsorption Temperature: ", adsorption_temp)
         print("Desorption Temperature: ", desorption_temp)
 
-        extracted_input_features = [energy_above_hull]                                                                  # Store the energy above hull and temperatures.
+        extracted_input_features = [energy_above_hull, avg_electronegativity]                                                                  # Store the energy above hull and temperatures.
         extracted_output_features = [adsorption_temp, desorption_temp]
 
         uncertain_features = [avg_bulk, avg_shear, poisson_ratio]                                                       # Store the mechanical features as uncertain features (These may or may not be used in the model training).
